@@ -1,0 +1,28 @@
+[package]
+name = "zenlog"
+version = "0.1.0"
+authors = ["Evgeny Safronov <division494@gmail.com>"]
+# build = "build.rs"
+
+[dependencies]
+rand = "0.3"
+lazy_static = "^0.1"
+quick-error = "^1.0"
+serde = "^0.7"
+serde_json = "^0.7"
+serde_yaml = "^0.2"
+serde_macros = "*"
+
+chan-signal = "*"
+chrono = "*"
+log = "*"
+clippy = "*"
+mio = "*"
+term = "*"
+# hyper = "*"
+# elastic_hyper = "*"
+yaml-rust = "*"
+
+[build-dependencies]
+# serde_codegen = "*"
+syntex = "*"

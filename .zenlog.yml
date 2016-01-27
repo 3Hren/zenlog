@@ -1,0 +1,6 @@
+severity: 0
+pipeline:
+  - sources:
+    - type: random
+      rate: 1.0
+      range: [8, 8]
