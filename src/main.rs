@@ -4,11 +4,9 @@ extern crate chan_signal as signals;
 
 extern crate zenlog;
 
-use std::sync::mpsc;
-
 use signals::Signal;
 
-use zenlog::{Config, Control, Runtime};
+use zenlog::{Config, Runtime};
 
 fn main() {
     let filename = ".zenlog.yml";
@@ -27,30 +25,19 @@ fn main() {
     let config = Config::from(filename)
         .expect("failed to read configuration file");
 
-    let mut runtime = Runtime::from(config.clone())
-        .expect("failed to initialize Zenlog");
+    zenlog::logging::reset(zenlog::logging::from_usize(config.severity()))
+        .expect("failed to initialize logging system");
 
     info!("starting Zenlog");
 
-    // Control channel.
-    let (mut tx, rx) = mpsc::channel();
-
-    let mut thread = runtime.run(rx);
+    let mut runtime = Some(Runtime::from(config.pipeline().clone()));
 
     for signal in listener {
         match signal {
             Signal::HUP => {
                 info!("caught HUP signal");
                 // TODO: Reread config
-
-                // Create new runtime, then swap.
-                runtime = Runtime::from(config.clone()).unwrap();
-                tx.send(Control::Shutdown).unwrap();
-                thread.join().unwrap();
-
-                let (xx, rx) = mpsc::channel();
-                tx = xx;
-                thread = runtime.run(rx);
+                runtime = Some(Runtime::from(config.pipeline().clone()));
             }
             signal => {
                 info!("caught {:?} signal, shutting down", signal);
@@ -59,11 +46,6 @@ fn main() {
         }
     }
 
-    tx.send(Control::Shutdown)
-        .expect("failed to emit shutdown signal");
-
-    thread.join()
-        .expect("failed to gracefully shut down the runtime");
-
+    runtime.unwrap();
     info!("Zenlog has been successfully stopped");
 }
