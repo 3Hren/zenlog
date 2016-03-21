@@ -7,7 +7,6 @@
 #![feature(question_mark)]
 
 #[macro_use] extern crate log;
-#[macro_use] extern crate lazy_static;
 #[macro_use] extern crate quick_error;
 extern crate rand;
 
@@ -22,7 +21,7 @@ extern crate yaml_rust as yaml;
 
 use std::collections::HashMap;
 use std::thread::{self, JoinHandle};
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
 
 pub use serde_json::Value;
 
@@ -37,24 +36,6 @@ use source::Source;
 pub use config::Config;
 use config::PipeConfig;
 
-// TODO: Use DI instead.
-lazy_static! {
-    static ref REGISTRY: Registry = {
-        info!("registering components");
-        let mut r = Registry::default();
-
-        r.sources.insert("random",
-            box |config, tx| {
-                let config = serde_json::value::from_value(config).unwrap();
-                source::Random::run(config, tx).map(|v| Box::new(v) as Box<Source>)
-            }
-        );
-        debug!("registered Random component in 'source' category");
-
-        r
-    };
-}
-
 pub type Record = Value;
 
 enum Control {
@@ -62,19 +43,46 @@ enum Control {
     Shutdown,
 }
 
-type SourceFactory = Fn(Value, mpsc::Sender<Record>) -> Result<Box<Source>, ()> + Send + Sync;
+pub trait Registry: Send +  Sync {
+    fn source(&self, ty: &str) -> Option<&SourceFactory>;
+}
 
 #[derive(Default)]
-struct Registry {
+pub struct MainRegistry {
     sources: HashMap<&'static str, Box<SourceFactory>>,
 }
 
-impl Registry {
+impl MainRegistry {
+    pub fn new() -> MainRegistry {
+        info!("registering components");
+        let mut sources: HashMap<&'static str, Box<SourceFactory>> = HashMap::new();
+
+        sources.insert("random",
+            box |config, tx| {
+                let config = serde_json::value::from_value(config).unwrap();
+                source::Random::run(config, tx).map(|v| Box::new(v) as Box<Source>)
+            }
+        );
+        debug!("registered Random component in 'source' category");
+
+        MainRegistry {
+            sources: sources,
+        }
+    }
+
     /// Registers a source with the factory.
     fn add_source<T: Source + Sized>(&mut self, factory: Box<SourceFactory>) {
         self.sources.insert(T::ty(), factory);
     }
 }
+
+impl Registry for MainRegistry {
+    fn source(&self, ty: &str) -> Option<&SourceFactory> {
+        self.sources.get(ty).map(|val| &**val)
+    }
+}
+
+pub type SourceFactory = Fn(Value, mpsc::Sender<Record>) -> Result<Box<Source>, ()> + Send + Sync;
 
 /// Represents the event proccessing pipeline.
 struct Pipe {
@@ -82,7 +90,7 @@ struct Pipe {
 }
 
 impl Pipe {
-    fn run(config: &PipeConfig) -> Result<Pipe, ()> {
+    fn run(config: &PipeConfig, registry: &Registry) -> Result<Pipe, ()> {
         // Pipelines.
         let (tx, rx) = mpsc::channel();
 
@@ -90,7 +98,7 @@ impl Pipe {
         let mut sources = Vec::new();
         for source in config.sources() {
             let ty = source.find("type").unwrap().as_string().unwrap();
-            let factory = REGISTRY.sources.get(&ty).unwrap();
+            let factory = registry.source(&ty).unwrap();
 
             trace!("starting '{}' source with config {:#?}", ty, source);
             let source = factory(source.clone(), tx.clone()).unwrap();
@@ -139,12 +147,12 @@ impl Runtime {
     /// Constructs Zenlog Runtime by constructing and starting all pipelines listed in the given
     /// config.
     // TODO: Move to From trait maybe.
-    pub fn from(config: Vec<PipeConfig>) -> Runtime {
+    pub fn from(config: Vec<PipeConfig>, registry: Arc<Registry>) -> Runtime {
         trace!("initializing the runtime: {:#?}", config);
 
         let (tx, rx) = mpsc::channel();
 
-        let thread = thread::spawn(move || Runtime::run(&config, rx));
+        let thread = thread::spawn(move || Runtime::run(&config, registry, rx));
 
         Runtime {
             tx: tx,
@@ -159,11 +167,11 @@ impl Runtime {
     }
 
     /// Blocks the current thread for running Zenlog Runtime.
-    fn run(config: &[PipeConfig], rx: mpsc::Receiver<Control>) {
+    fn run(config: &[PipeConfig], registry: Arc<Registry>, rx: mpsc::Receiver<Control>) {
         let mut pipelines = Vec::new();
 
         for c in config {
-            pipelines.push(Pipe::run(c).unwrap());
+            pipelines.push(Pipe::run(c, &*registry).unwrap());
         }
 
         info!("started {} pipelines", config.len());
