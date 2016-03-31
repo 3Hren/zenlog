@@ -54,6 +54,7 @@ impl Handler for SleepHandler {
             }
         }
 
+        // TODO: This is a single-shot timer, replace with periodic one.
         if ev.timeout_ms(id, (1000.0 / self.rate) as u64).is_err() {
             error!("failed to schedule a timeout");
             ev.shutdown();

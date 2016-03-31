@@ -28,9 +28,10 @@ pub use serde_json::Value;
 pub mod logging;
 
 mod config;
-// TODO: Enable: mod output;
+mod output;
 mod source;
 
+use output::Output;
 use source::Source;
 
 pub use config::Config;
@@ -83,9 +84,11 @@ impl Registry for MainRegistry {
 }
 
 pub type SourceFactory = Fn(Value, mpsc::Sender<Record>) -> Result<Box<Source>, ()> + Send + Sync;
+pub type OutputFactory = Fn(Value) -> Result<Box<Output>, ()> + Send + Sync;
 
 /// Represents the event proccessing pipeline.
 struct Pipe {
+    thread: Option<JoinHandle<()>>,
     sources: Vec<Box<Source>>,
 }
 
@@ -96,6 +99,7 @@ impl Pipe {
 
         // Start Sources.
         let mut sources = Vec::new();
+
         for source in config.sources() {
             let ty = source.find("type").unwrap().as_string().unwrap();
             let factory = registry.source(&ty).unwrap();
@@ -104,6 +108,16 @@ impl Pipe {
             let source = factory(source.clone(), tx.clone()).unwrap();
             sources.push(source);
         }
+
+        let thread = thread::spawn(move || {
+            debug!("started pipeline processing thread");
+
+            for record in rx {
+                debug!("processing {:?} ...", record);
+            }
+
+            debug!("successfully stopped pipeline procesing thread");
+        });
 
         //     // Fill.
         //     let filters = Vec::new();
@@ -131,10 +145,21 @@ impl Pipe {
         // TODO: Wait for all threads are joined.
 
         let pipe = Pipe {
+            thread: Some(thread),
             sources: sources,
         };
 
         Ok(pipe)
+    }
+}
+
+impl Drop for Pipe {
+    fn drop(&mut self) {
+        self.sources.clear();
+
+        if let Err(err) = self.thread.take().unwrap().join() {
+            error!("failed to gracefully shut down the runtime: {:?}", err);
+        }
     }
 }
 
@@ -147,6 +172,7 @@ impl Runtime {
     /// Constructs Zenlog Runtime by constructing and starting all pipelines listed in the given
     /// config.
     // TODO: Move to From trait maybe.
+    // TODO: Consider scoped thread API to avoid ARCs.
     pub fn from(config: Vec<PipeConfig>, registry: Arc<Registry>) -> Runtime {
         trace!("initializing the runtime: {:#?}", config);
 
