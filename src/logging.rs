@@ -42,7 +42,7 @@ fn color(level: LogLevel) -> term::color::Color {
 
 impl log::Log for Logger {
     fn enabled(&self, metadata: &LogMetadata) -> bool {
-        metadata.level() <= self.level
+        metadata.target().starts_with("zenlog") && metadata.level() <= self.level
     }
 
     fn log(&self, record: &LogRecord) {
