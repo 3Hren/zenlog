@@ -46,11 +46,13 @@ enum Control {
 
 pub trait Registry: Send +  Sync {
     fn source(&self, ty: &str) -> Option<&SourceFactory>;
+    fn output(&self, ty: &str) -> Option<&OutputFactory>;
 }
 
 #[derive(Default)]
 pub struct MainRegistry {
     sources: HashMap<&'static str, Box<SourceFactory>>,
+    outputs: HashMap<&'static str, Box<OutputFactory>>,
 }
 
 impl MainRegistry {
@@ -66,8 +68,14 @@ impl MainRegistry {
         );
         debug!("registered Random component in 'source' category");
 
+        let mut outputs: HashMap<&'static str, Box<OutputFactory>> = HashMap::new();
+
+        outputs.insert("stream", box |_| Ok(box output::Stream));
+        debug!("registered Stream component in 'output' category");
+
         MainRegistry {
             sources: sources,
+            outputs: outputs,
         }
     }
 
@@ -81,12 +89,23 @@ impl Registry for MainRegistry {
     fn source(&self, ty: &str) -> Option<&SourceFactory> {
         self.sources.get(ty).map(|val| &**val)
     }
+
+    fn output(&self, ty: &str) -> Option<&OutputFactory> {
+        self.outputs.get(ty).map(|val| &**val)
+    }
 }
 
 pub type SourceFactory = Fn(Value, mpsc::Sender<Record>) -> Result<Box<Source>, ()> + Send + Sync;
 pub type OutputFactory = Fn(Value) -> Result<Box<Output>, ()> + Send + Sync;
 
 /// Represents the event proccessing pipeline.
+///
+/// The control flow on destruction is:
+///  1. Drop pipe.
+///  2. Drop all sources.
+///  3. Tx is dropped -> Rx is exhaused -> Control thread is stopping.
+///  4. Drop filters.
+///  5. Drop outputs.
 struct Pipe {
     thread: Option<JoinHandle<()>>,
     sources: Vec<Box<Source>>,
@@ -100,13 +119,55 @@ impl Pipe {
         // Start Sources.
         let mut sources = Vec::new();
 
-        for source in config.sources() {
-            let ty = source.find("type").unwrap().as_string().unwrap();
-            let factory = registry.source(&ty).unwrap();
+        for config in config.sources() {
+            let ty = match config.find("type") {
+                Some(&Value::String(ref ty)) => ty,
+                Some(..) | None => {
+                    error!("config {:?} is malformed: required field 'type' is missing or have non-string value", config);
+                    // TODO: return Err(MissingType(config));
+                    return Err(());
+                }
+            };
 
-            trace!("starting '{}' source with config {:#?}", ty, source);
-            let source = factory(source.clone(), tx.clone()).unwrap();
+            // TODO: let factory = registry.source(&ty).map_err(UnregisteredFactory(ty.clone()))?;
+            let factory = match registry.source(&ty) {
+                Some(factory) => factory,
+                None => {
+                    error!("failed to create source {}: factory is not registered", ty);
+                    // TODO: return Err(UnregisteredFactory(ty));
+                    return Err(());
+                }
+            };
+
+            trace!("starting '{}' source with config {:#?}", ty, config);
+            let source = factory(config.clone(), tx.clone()).unwrap();
             sources.push(source);
+        }
+
+        let mut outputs = Vec::new();
+        for config in config.outputs() {
+            let ty = match config.find("type") {
+                Some(&Value::String(ref ty)) => ty,
+                Some(..) | None => {
+                    error!("config {:?} is malformed: required field 'type' is missing or have non-string value", config);
+                    // TODO: return Err(MissingType(config));
+                    return Err(());
+                }
+            };
+
+            // TODO: let factory = registry.output(&ty).map_err(UnregisteredFactory(ty.clone()))?;
+            let factory = match registry.output(&ty) {
+                Some(factory) => factory,
+                None => {
+                    error!("failed to create output {}: factory is not registered", ty);
+                    // TODO: return Err(UnregisteredFactory(ty));
+                    return Err(());
+                }
+            };
+
+            trace!("created '{}' output with config {:#?}", ty, config);
+            let output = factory(config.clone()).unwrap();
+            outputs.push(output);
         }
 
         let thread = thread::spawn(move || {
@@ -114,35 +175,19 @@ impl Pipe {
 
             for record in rx {
                 debug!("processing {:?} ...", record);
+
+                if record.find("message").is_none() {
+                    error!("drop '{:?}': message field required", record);
+                    continue;
+                }
+
+                for output in &mut outputs {
+                    output.handle(&record);
+                }
             }
 
             debug!("successfully stopped pipeline procesing thread");
         });
-
-        //     // Fill.
-        //     let filters = Vec::new();
-        //     let outputs = Vec::new();
-        //
-        //     let thread = thread::spawn(move || {
-        //         for record in rx {
-        //             debug!("processing {:?} ...", record);
-        //
-        //             if record.find("message").is_none() {
-        //                 warn!(target: "pipe", "dropping '{:?}': message field required", record);
-        //                 continue;
-        //             }
-        //
-        //             filters.each(|| ...);
-        //             // Must consume ASAP.
-        //             outputs.each().process(...);
-        //             unimplemented!();
-        //         }
-        //     });
-        //
-        //     threads.push(thread);
-        // TODO: Drop all sources.
-        // TODO: Drop all outputs.
-        // TODO: Wait for all threads are joined.
 
         let pipe = Pipe {
             thread: Some(thread),

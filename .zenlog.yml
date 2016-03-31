@@ -1,6 +1,9 @@
 severity: 0
 pipeline:
-  - sources:
-    - type: random
-      rate: 1.0
-      range: [8, 8]
+  - name: zen
+    sources:
+      - type: random
+        rate: 1.0
+        range: [8, 8]
+    outputs:
+      - type: stream

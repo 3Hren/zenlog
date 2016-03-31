@@ -14,6 +14,6 @@ pub use self::stream::Stream;
 
 use super::{Record};
 
-pub trait Output {
-    fn handle(record: &Record);
+pub trait Output: Send {
+    fn handle(&mut self, record: &Record);
 }

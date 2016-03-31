@@ -22,12 +22,16 @@ quick_error! {
 pub struct PipeConfig {
     sources: Vec<Value>,
     // TODO: Filter.
-    // TODO: Output.
+    outputs: Vec<Value>,
 }
 
 impl PipeConfig {
     pub fn sources(&self) -> &Vec<Value> {
         &self.sources
+    }
+
+    pub fn outputs(&self) -> &Vec<Value> {
+        &self.outputs
     }
 }
 

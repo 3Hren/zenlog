@@ -6,7 +6,7 @@ use super::super::{Record};
 pub struct Stream;
 
 impl Output for Stream {
-    fn handle(record: &Record) {
+    fn handle(&mut self, record: &Record) {
         match to_string(&record) {
             Ok(buf) => {
                 println!("{}", buf);
