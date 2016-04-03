@@ -1,13 +1,42 @@
-struct TcpInput {
+use std::io::{BufReader, Read};
+use std::net::{SocketAddr, TcpListener, ToSocketAddrs};
+use std::sync::mpsc;
+use std::thread;
+
+use serde_json;
+use serde::de::Deserialize;
+
+use super::Source;
+use super::super::{Record};
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Config {
+    endpoint: (String, u16),
+}
+
+pub struct TcpSource {
     _listener: TcpListener,
 }
 
-impl TcpInput {
-    fn new(endpoint: &SocketAddr, tx: Sender<Record>) -> Result<Self, std::io::Error> {
-        let listener = try!(TcpListener::bind(endpoint));
-        info!(target: "TCP input", "exposed TCP input on {}", endpoint);
+impl TcpSource {
+    pub fn run(config: Config, tx: mpsc::Sender<Record>) -> Result<TcpSource, ()> {
+        let (host, port) = config.endpoint;
+        debug!("performing blocking DNS request ...");
 
-        let socket = try!(listener.try_clone());
+        for endpoint in (host.as_str(), port).to_socket_addrs().unwrap() {
+            if let Ok(source) = TcpSource::new(&endpoint, tx.clone()) {
+                return Ok(source);
+            }
+        }
+
+        Err(())
+    }
+
+    fn new(endpoint: &SocketAddr, tx: mpsc::Sender<Record>) -> Result<TcpSource, ::std::io::Error> {
+        let listener = TcpListener::bind(endpoint)?;
+        info!("exposed TCP input on {}", endpoint);
+
+        let socket = listener.try_clone()?;
 
         thread::spawn(move || {
             for stream in socket.incoming() {
@@ -20,7 +49,7 @@ impl TcpInput {
                             }
                         };
 
-                        debug!(target: "TCP input", "accepted TCP connection from {}", peer);
+                        debug!("accepted TCP connection from {}", peer);
                         let tx = tx.clone();
                         let rd = BufReader::new(stream);
                         thread::spawn(move || {
@@ -32,7 +61,7 @@ impl TcpInput {
                                         tx.send(record).expect("pipeline must outlive all attached inputs");
                                     }
                                     Err(err) => {
-                                        warn!(target: "TCP input", "unable to decode payload - {}", err);
+                                        warn!("unable to decode payload - {}", err);
                                         break;
                                     }
                                 }
@@ -40,13 +69,13 @@ impl TcpInput {
                         });
                     }
                     Err(err) => {
-                        error!(target: "TCP input", "unable to accept TCP connection: {}", err);
+                        error!("unable to accept TCP connection: {}", err);
                     }
                 }
             }
         });
 
-        let input = TcpInput {
+        let input = TcpSource {
             _listener: listener,
         };
 
@@ -54,4 +83,8 @@ impl TcpInput {
     }
 }
 
-impl Input for TcpInput {}
+impl Source for TcpSource {
+    fn ty() -> &'static str {
+        "tcp"
+    }
+}

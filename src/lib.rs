@@ -68,6 +68,14 @@ impl MainRegistry {
         );
         debug!("registered Random component in 'source' category");
 
+        sources.insert("tcp",
+            box |config, tx| {
+                let config = serde_json::value::from_value(config).unwrap();
+                source::TcpSource::run(config, tx).map(|v| Box::new(v) as Box<Source>)
+            }
+        );
+        debug!("registered TCP component in 'source' category");
+
         let mut outputs: HashMap<&'static str, Box<OutputFactory>> = HashMap::new();
 
         outputs.insert("stream", box |_| Ok(box output::Stream));
