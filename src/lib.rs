@@ -205,7 +205,9 @@ impl Pipe {
         Ok(pipe)
     }
 
-    fn hup(&mut self) {}
+    fn hup(&mut self) {
+        unimplemented!()
+    }
 }
 
 
@@ -256,7 +258,7 @@ impl Runtime {
             pipelines.push(Pipe::run(c, &*registry).unwrap());
         }
 
-        info!("started {} pipelines", config.len());
+        info!("started {} pipeline(s)", config.len());
 
         // Main control loop.
         for event in rx {
