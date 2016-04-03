@@ -181,6 +181,14 @@ impl Pipe {
                     continue;
                 }
 
+                if record.find("timestamp").is_none() {
+                    // TODO: Add (which format?).
+                }
+
+                // TODO: Filter.
+
+                // TODO: Measure from TCP to file. Then spawn separate thread for each output and
+                // measure again.
                 for output in &mut outputs {
                     output.handle(&record);
                 }
@@ -196,7 +204,10 @@ impl Pipe {
 
         Ok(pipe)
     }
+
+    fn hup(&mut self) {}
 }
+
 
 impl Drop for Pipe {
     fn drop(&mut self) {
@@ -251,8 +262,11 @@ impl Runtime {
         for event in rx {
             match event {
                 Control::Hup => {
-                    // TODO: For each pipeline - reload().
-                    unimplemented!();
+                    debug!("reloading each pipeline");
+
+                    for pipeline in &mut pipelines {
+                        pipeline.hup();
+                    }
                 }
                 Control::Shutdown => {
                     debug!("received shutdown event");

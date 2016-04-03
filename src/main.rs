@@ -22,7 +22,8 @@ fn main() {
     // signals, otherwise we can blow up, resulting in sudden catch one of non blocked signal,
     // which probably just kills the application.
     // Also there shouldn't be any other signal handlers installed. This is the law, asshole!
-    let listener = signals::notify(&[Signal::INT, Signal::TERM, Signal::HUP]);
+    let sigset  = [Signal::INT, Signal::TERM, Signal::HUP, Signal::ALRM];
+    let listener = signals::notify(&sigset);
 
     let config = Config::from(filename)
         .expect("failed to read configuration file");
@@ -33,15 +34,20 @@ fn main() {
     let registry = Arc::new(MainRegistry::new());
 
     info!("starting Zenlog");
+    info!("special signal handlers are set for {:?} signals", sigset);
 
     let mut runtime = Some(Runtime::from(config.pipeline().clone(), registry.clone()));
 
     for signal in listener {
+        info!("caught {:?} signal", signal);
         match signal {
             Signal::HUP => {
-                info!("caught HUP signal");
                 // TODO: Reread config
                 runtime = Some(Runtime::from(config.pipeline().clone(), registry.clone()));
+            }
+            Signal::ALRM => {
+                // Always valid.
+                runtime.as_mut().unwrap().hup();
             }
             signal => {
                 info!("caught {:?} signal, shutting down", signal);
