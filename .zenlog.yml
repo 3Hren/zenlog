@@ -5,5 +5,7 @@ pipeline:
       - type: random
         rate: 1.0
         range: [8, 8]
+      - type: tcp
+        endpoint: ["::", 50031]
     outputs:
       - type: stream
