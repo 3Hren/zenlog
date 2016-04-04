@@ -8,8 +8,10 @@
 //!
 //! The result: each output manages its blocking mode itself.
 
+mod file;
 mod stream;
 
+pub use self::file::FileOutput;
 pub use self::stream::Stream;
 
 use super::{Record};
