@@ -14,12 +14,13 @@ mod stream;
 pub use self::file::FileOutput;
 pub use self::stream::Stream;
 
+use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
 use super::{Record};
 
 pub trait Output: Send {
-    fn handle(&mut self, record: &Record);
+    fn handle(&mut self, record: &Arc<Record>);
 
     /// Creates an optional sender, which should be triggered when it's time to reload the output.
     ///

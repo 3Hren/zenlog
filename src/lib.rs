@@ -204,8 +204,8 @@ impl Pipe {
 
                 // TODO: Filter.
 
-                // TODO: Measure from TCP to file. Then spawn separate thread for each output and
-                // measure again.
+                let record = Arc::new(record);
+
                 for output in &mut outputs {
                     output.handle(&record);
                 }

@@ -202,37 +202,51 @@
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
+use std::sync::mpsc;
+use std::sync::Arc;
+use std::thread;
+use std::thread::JoinHandle;
 
 use super::Output;
 use super::super::{Record};
 
 pub struct FileOutput {
-    file: File,
+    tx: mpsc::Sender<Arc<Record>>,
+    thread: Option<JoinHandle<()>>,
 }
 
 impl FileOutput {
     pub fn new<P: AsRef<Path>>(path: P) -> FileOutput {
+        let (tx, rx) = mpsc::channel::<Arc<Record>>();
+
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(path)
+            .unwrap();
+
+        let thread = thread::spawn(move || {
+            for record in rx {
+                let mut message = String::new();
+                message.push_str(record.find("message").unwrap().as_string().unwrap());
+                message.push('\n');
+
+                match file.write(message.as_bytes()) {
+                    Ok(num) => debug!("{} bytes written", num),
+                    Err(err) => error!("writing error - {}", err),
+                }
+            }
+        });
+
         FileOutput {
-            file: OpenOptions::new()
-                .write(true)
-                .create(true)
-                // .truncate(true)
-                // .append(true)
-                .open(path)
-                .unwrap(),
+            tx: tx,
+            thread: Some(thread),
         }
     }
 }
 
 impl Output for FileOutput {
-    fn handle(&mut self, record: &Record) {
-        let mut message = String::new();
-        message.push_str(record.find("message").unwrap().as_string().unwrap());
-        message.push('\n');
-
-        match self.file.write(message.as_bytes()) {
-            Ok(num) => debug!("{} bytes written", num),
-            Err(err) => error!("writing error - {}", err),
-        }
+    fn handle(&mut self, record: &Arc<Record>) {
+        self.tx.send(record.clone()).unwrap();
     }
 }

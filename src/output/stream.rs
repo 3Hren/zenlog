@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde_json::ser::to_string;
 
 use super::Output;
@@ -9,7 +11,7 @@ use super::super::{Record};
 pub struct Stream;
 
 impl Output for Stream {
-    fn handle(&mut self, record: &Record) {
+    fn handle(&mut self, record: &Arc<Record>) {
         match to_string(&record) {
             Ok(buf) => {
                 println!("{}", buf);
