@@ -16,6 +16,7 @@ fn main() {
     // List of signals we want to listen.
     // - INT and TERM - for graceful termination.
     // - HUP - for graceful runtime reloading without restarting.
+    // - ALRM - (yeah, alarm, what the fuck?!) for file output reloading.
     //
     // We definetely should listen signals here, not elsewhere in the library, because they are
     // tricky and fucking dangerous. First of all, all threads except this one should block ALL

@@ -14,8 +14,20 @@ mod stream;
 pub use self::file::FileOutput;
 pub use self::stream::Stream;
 
+use std::sync::mpsc::Sender;
+
 use super::{Record};
 
 pub trait Output: Send {
     fn handle(&mut self, record: &Record);
+
+    /// Creates an optional sender, which should be triggered when it's time to reload the output.
+    ///
+    /// For example it's useful for integration with logrotate, which sends HUP or USR1 signal when
+    /// it's time to reopen rotated files.
+    ///
+    /// Default implementation always returns None.
+    fn hup(&self) -> Option<Sender<()>> {
+        None
+    }
 }

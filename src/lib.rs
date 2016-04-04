@@ -120,6 +120,7 @@ pub type OutputFactory = Fn(Value) -> Result<Box<Output>, ()> + Send + Sync;
 struct Pipe {
     thread: Option<JoinHandle<()>>,
     sources: Vec<Box<Source>>,
+    hups: Vec<mpsc::Sender<()>>,
 }
 
 impl Pipe {
@@ -181,6 +182,11 @@ impl Pipe {
             outputs.push(output);
         }
 
+        // Collect all hup channels.
+        let hups: Vec<mpsc::Sender<()>> = outputs.iter()
+            .filter_map(|output| output.hup())
+            .collect();
+
         let thread = thread::spawn(move || {
             debug!("started pipeline processing thread");
 
@@ -211,16 +217,20 @@ impl Pipe {
         let pipe = Pipe {
             thread: Some(thread),
             sources: sources,
+            hups: hups,
         };
 
         Ok(pipe)
     }
 
     fn hup(&mut self) {
-        unimplemented!()
+        for hup in &self.hups {
+            if let Err(err) = hup.send(()) {
+                error!("failed to send hup event to one of the receivers: {:?}", err);
+            }
+        }
     }
 }
-
 
 impl Drop for Pipe {
     fn drop(&mut self) {
