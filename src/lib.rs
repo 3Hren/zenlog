@@ -81,7 +81,9 @@ impl MainRegistry {
         outputs.insert("stream", box |_| Ok(box output::Stream));
         debug!("registered Stream component in 'output' category");
 
-        outputs.insert("file", box |_| Ok(box output::FileOutput::new("/tmp/zenlog.log")));
+        outputs.insert("file", box |config| {
+            Ok(box output::FileOutput::new(config.find("path").unwrap().as_string().unwrap()))
+        });
         debug!("registered File component in 'output' category");
 
         MainRegistry {
