@@ -1,5 +1,7 @@
 use std::io::{BufReader, Read};
-use std::net::{SocketAddr, TcpListener, ToSocketAddrs};
+use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::thread;
 
@@ -15,7 +17,8 @@ pub struct Config {
 }
 
 pub struct TcpSource {
-    _listener: TcpListener,
+    abort: Arc<AtomicBool>,
+    listener: TcpListener,
 }
 
 impl TcpSource {
@@ -37,9 +40,15 @@ impl TcpSource {
         info!("exposed TCP input on {}", endpoint);
 
         let socket = listener.try_clone()?;
+        let abort = Arc::new(AtomicBool::new(false));
+        let aborted = abort.clone();
 
         thread::spawn(move || {
             for stream in socket.incoming() {
+                if aborted.load(Ordering::SeqCst) {
+                    break;
+                }
+
                 match stream {
                     Ok(stream) => {
                         let peer = match stream.peer_addr() {
@@ -76,10 +85,23 @@ impl TcpSource {
         });
 
         let input = TcpSource {
-            _listener: listener,
+            abort: abort,
+            listener: listener,
         };
 
         Ok(input)
+    }
+}
+
+impl Drop for TcpSource {
+    fn drop(&mut self) {
+        self.abort.store(true, Ordering::SeqCst);
+        let endpoint = match self.listener.local_addr() {
+            Ok(val) => val,
+            Err(..) => return,
+        };
+
+        let _ = TcpStream::connect(endpoint);
     }
 }
 
