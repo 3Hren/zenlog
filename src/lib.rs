@@ -146,7 +146,7 @@ impl Pipe {
             };
 
             trace!("starting '{}' source with config {:#?}", ty, config);
-            let source = factory(config.clone(), tx.clone()).unwrap();
+            let source = factory(config.clone(), tx.clone())?;
             sources.push(source);
         }
 
@@ -172,7 +172,7 @@ impl Pipe {
             };
 
             trace!("created '{}' output with config {:#?}", ty, config);
-            let output = factory(config.clone()).unwrap();
+            let output = factory(config.clone())?;
             outputs.push(output);
         }
 
@@ -245,37 +245,41 @@ impl Runtime {
     /// Constructs Zenlog Runtime by constructing and starting all pipelines listed in the given
     /// config.
     // TODO: Move to From trait maybe.
-    // TODO: Consider scoped thread API to avoid ARCs.
-    pub fn from(config: Vec<PipeConfig>, registry: Arc<Registry>) -> Runtime {
+    pub fn from(config: Vec<PipeConfig>, registry: &Registry) -> Result<Runtime, ()> {
         trace!("initializing the runtime: {:#?}", config);
 
         let (tx, rx) = mpsc::channel();
 
-        let thread = thread::spawn(move || Runtime::run(&config, registry, rx));
+        let thread = Runtime::init(&config, registry, rx)?;
 
-        Runtime {
+        let runtime = Runtime {
             tx: tx,
             thread: Some(thread),
-        }
+        };
+
+        Ok(runtime)
     }
 
-    pub fn hup(&mut self) {
-        if let Err(err) = self.tx.send(Control::Hup) {
-            error!("failed to send hup signal to the runtime: {}", err);
-        }
-    }
-
-    /// Blocks the current thread for running Zenlog Runtime.
-    fn run(config: &[PipeConfig], registry: Arc<Registry>, rx: mpsc::Receiver<Control>) {
+    fn init(config: &[PipeConfig], registry: &Registry, rx: mpsc::Receiver<Control>) ->
+        Result<JoinHandle<()>, ()>
+    {
         let mut pipelines = Vec::new();
 
         for c in config {
-            pipelines.push(Pipe::run(c, &*registry).unwrap());
+            pipelines.push(Pipe::run(c, registry)?);
         }
 
         info!("started {} pipeline(s)", config.len());
 
-        // Main control loop.
+        let thread = thread::spawn(move || Runtime::run(pipelines, rx));
+
+        Ok(thread)
+    }
+
+    /// Blocks the current thread for running Zenlog Runtime.
+    fn run(pipelines: Vec<Pipe>, rx: mpsc::Receiver<Control>) {
+        let mut pipelines = pipelines;
+
         for event in rx {
             match event {
                 Control::Hup => {
@@ -290,6 +294,12 @@ impl Runtime {
                     break;
                 }
             }
+        }
+    }
+
+    pub fn hup(&mut self) {
+        if let Err(err) = self.tx.send(Control::Hup) {
+            error!("failed to send hup signal to the runtime: {}", err);
         }
     }
 }

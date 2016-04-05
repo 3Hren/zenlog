@@ -4,8 +4,6 @@ extern crate chan_signal as signals;
 
 extern crate zenlog;
 
-use std::sync::Arc;
-
 use signals::Signal;
 
 use zenlog::{Config, MainRegistry, Runtime};
@@ -32,19 +30,26 @@ fn main() {
     zenlog::logging::reset(zenlog::logging::from_usize(config.severity()))
         .expect("failed to initialize logging system");
 
-    let registry = Arc::new(MainRegistry::new());
+    let registry = MainRegistry::new();
 
     info!("starting Zenlog");
     info!("special signal handlers are set for {:?} signals", sigset);
 
-    let mut runtime = Some(Runtime::from(config.pipeline().clone(), registry.clone()));
+    let mut runtime = Some(Runtime::from(config.pipeline().clone(), &registry)
+        .expect("failed to create runtime"));
 
     for signal in listener {
         info!("caught {:?} signal", signal);
         match signal {
             Signal::HUP => {
                 // TODO: Reread config
-                runtime = Some(Runtime::from(config.pipeline().clone(), registry.clone()));
+                runtime = match Runtime::from(config.pipeline().clone(), &registry) {
+                    Ok(runtime) => Some(runtime),
+                    Err(err) => {
+                        error!("failed to create runtime: {:?}", err);
+                        continue;
+                    }
+                };
             }
             Signal::ALRM => {
                 // Always valid.
