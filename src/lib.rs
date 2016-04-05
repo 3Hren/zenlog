@@ -192,6 +192,7 @@ impl Pipe {
                     continue;
                 }
 
+                // TODO: Maybe add this as a filter?
                 if record.find("timestamp").is_none() {
                     // TODO: Add (which format?).
                 }
