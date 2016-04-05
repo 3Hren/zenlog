@@ -9,3 +9,5 @@ pipeline:
         endpoint: ["::", 50031]
     outputs:
       - type: stream
+      - type: file
+        path: /tmp/zenlog.log.0
