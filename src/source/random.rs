@@ -11,7 +11,7 @@ use mio::{EventLoop, Handler};
 
 use serde_json::Value;
 
-use super::Source;
+use super::{Source, SourceFrom};
 use super::super::{Record};
 
 fn rand_string(len: u16) -> String {
@@ -82,8 +82,27 @@ pub struct Random {
     thread: Option<JoinHandle<()>>,
 }
 
-impl Random {
-    pub fn run(config: Config, tx: mpsc::Sender<Record>) -> Result<Random, ()> {
+impl Drop for Random {
+    fn drop(&mut self) {
+        if let Err(err) = self.terminator.send(()) {
+            error!("failed to send termination event: {}", err);
+        }
+
+        // This should never fail, because we own thread variable and noone joins it elsewhere.
+        self.thread.take().unwrap().join().unwrap();
+    }
+}
+
+impl Source for Random {
+    fn ty() -> &'static str {
+        "random"
+    }
+}
+
+impl SourceFrom for Random {
+    type Config = Config;
+
+    fn run(config: Config, tx: mpsc::Sender<Record>) -> Result<Random, ()> {
         let (min, max) = config.range;
 
         if min > max {
@@ -107,23 +126,6 @@ impl Random {
         };
 
         Ok(source)
-    }
-}
-
-impl Drop for Random {
-    fn drop(&mut self) {
-        if let Err(err) = self.terminator.send(()) {
-            error!("failed to send termination event: {}", err);
-        }
-
-        // This should never fail, because we own thread variable and noone joins it elsewhere.
-        self.thread.take().unwrap().join().unwrap();
-    }
-}
-
-impl Source for Random {
-    fn ty() -> &'static str {
-        "random"
     }
 }
 

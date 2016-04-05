@@ -8,7 +8,7 @@ use std::thread;
 use serde_json;
 use serde::de::Deserialize;
 
-use super::Source;
+use super::{Source, SourceFrom};
 use super::super::{Record};
 
 #[derive(Clone, Debug, Deserialize)]
@@ -22,19 +22,6 @@ pub struct TcpSource {
 }
 
 impl TcpSource {
-    pub fn run(config: Config, tx: mpsc::Sender<Record>) -> Result<TcpSource, ()> {
-        let (host, port) = config.endpoint;
-        debug!("performing blocking DNS request ...");
-
-        for endpoint in (host.as_str(), port).to_socket_addrs().unwrap() {
-            if let Ok(source) = TcpSource::new(&endpoint, tx.clone()) {
-                return Ok(source);
-            }
-        }
-
-        Err(())
-    }
-
     fn new(endpoint: &SocketAddr, tx: mpsc::Sender<Record>) -> Result<TcpSource, ::std::io::Error> {
         let listener = TcpListener::bind(endpoint)?;
         info!("exposed TCP input on {}", endpoint);
@@ -108,5 +95,22 @@ impl Drop for TcpSource {
 impl Source for TcpSource {
     fn ty() -> &'static str {
         "tcp"
+    }
+}
+
+impl SourceFrom for TcpSource {
+    type Config = Config;
+
+    fn run(config: Config, tx: mpsc::Sender<Record>) -> Result<TcpSource, ()> {
+        let (host, port) = config.endpoint;
+        debug!("performing blocking DNS request ...");
+
+        for endpoint in (host.as_str(), port).to_socket_addrs().unwrap() {
+            if let Ok(source) = TcpSource::new(&endpoint, tx.clone()) {
+                return Ok(source);
+            }
+        }
+
+        Err(())
     }
 }

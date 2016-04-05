@@ -32,7 +32,7 @@ mod output;
 mod source;
 
 use output::Output;
-use source::Source;
+use source::{Source, SourceFrom};
 
 pub use config::Config;
 use config::PipeConfig;
@@ -58,43 +58,32 @@ pub struct MainRegistry {
 impl MainRegistry {
     pub fn new() -> MainRegistry {
         info!("registering components");
-        let mut sources: HashMap<&'static str, Box<SourceFactory>> = HashMap::new();
 
-        sources.insert("random",
-            box |config, tx| {
-                let config = serde_json::value::from_value(config).unwrap();
-                source::Random::run(config, tx).map(|v| Box::new(v) as Box<Source>)
-            }
-        );
-        debug!("registered Random component in 'source' category");
+        let mut registry = MainRegistry::default();
+        registry.add_source::<source::Random>();
+        registry.add_source::<source::TcpSource>();
 
-        sources.insert("tcp",
-            box |config, tx| {
-                let config = serde_json::value::from_value(config).unwrap();
-                source::TcpSource::run(config, tx).map(|v| Box::new(v) as Box<Source>)
-            }
-        );
-        debug!("registered TCP component in 'source' category");
-
-        let mut outputs: HashMap<&'static str, Box<OutputFactory>> = HashMap::new();
-
-        outputs.insert("stream", box |_| Ok(box output::Stream));
+        registry.outputs.insert("stream", box |_| Ok(box output::Stream));
         debug!("registered Stream component in 'output' category");
 
-        outputs.insert("file", box |config| {
+        registry.outputs.insert("file", box |config| {
             Ok(box output::FileOutput::new(config.find("path").unwrap().as_string().unwrap()))
         });
         debug!("registered File component in 'output' category");
 
-        MainRegistry {
-            sources: sources,
-            outputs: outputs,
-        }
+        registry
     }
 
     /// Registers a source with the factory.
-    fn add_source<T: Source + Sized>(&mut self, factory: Box<SourceFactory>) {
-        self.sources.insert(T::ty(), factory);
+    fn add_source<T: SourceFrom + 'static>(&mut self) {
+        self.sources.insert(T::ty(),
+            box |config, tx| {
+                let config = serde_json::value::from_value(config).unwrap();
+                T::run(config, tx).map(|v| Box::new(v) as Box<Source>)
+            }
+        );
+
+        debug!("registered {} component in 'source' category", T::ty());
     }
 }
 
