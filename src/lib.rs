@@ -78,7 +78,10 @@ impl MainRegistry {
     fn add_source<T: SourceFrom + 'static>(&mut self) {
         self.sources.insert(T::ty(),
             box |config, tx| {
-                let config = serde_json::value::from_value(config).unwrap();
+                let config = match serde_json::value::from_value(config) {
+                    Ok(val) => val,
+                    Err(..) => return Err(()),
+                };
                 T::run(config, tx).map(|v| Box::new(v) as Box<Source>)
             }
         );
