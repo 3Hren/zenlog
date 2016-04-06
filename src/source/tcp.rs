@@ -1,4 +1,4 @@
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Error, ErrorKind, Read};
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -22,7 +22,7 @@ pub struct TcpSource {
 }
 
 impl TcpSource {
-    fn new(endpoint: &SocketAddr, tx: mpsc::Sender<Record>) -> Result<TcpSource, ::std::io::Error> {
+    fn new(endpoint: &SocketAddr, tx: mpsc::Sender<Record>) -> Result<TcpSource, Error> {
         let listener = TcpListener::bind(endpoint)?;
         info!("exposed TCP input on {}", endpoint);
 
@@ -99,9 +99,10 @@ impl Source for TcpSource {
 }
 
 impl SourceFrom for TcpSource {
+    type Error = Error;
     type Config = Config;
 
-    fn run(config: Config, tx: mpsc::Sender<Record>) -> Result<TcpSource, Box<::std::error::Error>> {
+    fn run(config: Config, tx: mpsc::Sender<Record>) -> Result<TcpSource, Error> {
         let (host, port) = config.endpoint;
         debug!("performing blocking DNS request ...");
 
@@ -111,6 +112,6 @@ impl SourceFrom for TcpSource {
             }
         }
 
-        unimplemented!()
+        Err(Error::new(ErrorKind::ConnectionRefused, "connection refused"))
     }
 }

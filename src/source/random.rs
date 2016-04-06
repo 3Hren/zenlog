@@ -79,6 +79,9 @@ quick_error! {
     #[derive(Debug)]
     pub enum Error {
         InvalidRange(range: (u16, u16)) {}
+        Io(err: ::std::io::Error) {
+            from()
+        }
     }
 }
 
@@ -107,19 +110,20 @@ impl Source for Random {
 }
 
 impl SourceFrom for Random {
+    type Error = Error;
     type Config = Config;
 
-    fn run(config: Config, tx: mpsc::Sender<Record>) -> Result<Random, Box<::std::error::Error>> {
+    fn run(config: Config, tx: mpsc::Sender<Record>) -> Result<Random, Error> {
         let (min, max) = config.range;
 
         if min > max {
-            return Err(box Error::InvalidRange((min, max)));
+            return Err(Error::InvalidRange((min, max)));
         }
 
         let rate = config.rate;
         let range = Range::new(min, max + 1);
 
-        let mut ev = EventLoop::new().unwrap();
+        let mut ev = EventLoop::new()?;
         let terminator = ev.channel();
 
         let thread = thread::spawn(move || {

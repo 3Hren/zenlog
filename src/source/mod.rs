@@ -17,9 +17,12 @@ pub trait Source: Send {
 }
 
 pub trait SourceFrom: Source + Sized {
+    /// The reason of run failure.
+    type Error: Error;
+
     /// Represents a source's deserializable config.
     type Config: Deserialize;
 
     /// Constructs and immediately run the source by configuring it with the given config.
-    fn run(config: Self::Config, tx: mpsc::Sender<Record>) -> Result<Self, Box<Error>>;
+    fn run(config: Self::Config, tx: mpsc::Sender<Record>) -> Result<Self, Self::Error>;
 }

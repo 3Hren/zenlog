@@ -62,7 +62,7 @@ impl MainRegistry {
 
         let mut registry = MainRegistry::default();
         registry.add_source::<source::Random>();
-        registry.add_source::<source::TcpSource>();
+        // registry.add_source::<source::TcpSource>();
 
         registry.outputs.insert("stream", box |_| Ok(box output::Stream));
         debug!("registered Stream component in 'output' category");
@@ -80,7 +80,9 @@ impl MainRegistry {
         self.sources.insert(T::ty(),
             box |config, tx| {
                 let config = serde_json::value::from_value(config)?;
-                T::run(config, tx).map(|v| Box::new(v) as Box<Source>)
+                T::run(config, tx)
+                    .map(|v| box v as Box<Source>)
+                    .map_err(|e| box e as Box<Error>)
             }
         );
 
