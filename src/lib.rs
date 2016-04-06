@@ -20,6 +20,7 @@ extern crate term;
 extern crate yaml_rust as yaml;
 
 use std::collections::HashMap;
+use std::error::Error;
 use std::thread::{self, JoinHandle};
 use std::sync::{mpsc, Arc};
 
@@ -78,10 +79,7 @@ impl MainRegistry {
     fn add_source<T: SourceFrom + 'static>(&mut self) {
         self.sources.insert(T::ty(),
             box |config, tx| {
-                let config = match serde_json::value::from_value(config) {
-                    Ok(val) => val,
-                    Err(..) => return Err(()),
-                };
+                let config = serde_json::value::from_value(config)?;
                 T::run(config, tx).map(|v| Box::new(v) as Box<Source>)
             }
         );
@@ -100,7 +98,7 @@ impl Registry for MainRegistry {
     }
 }
 
-pub type SourceFactory = Fn(Value, mpsc::Sender<Record>) -> Result<Box<Source>, ()> + Send + Sync;
+pub type SourceFactory = Fn(Value, mpsc::Sender<Record>) -> Result<Box<Source>, Box<Error>> + Send + Sync;
 pub type OutputFactory = Fn(Value) -> Result<Box<Output>, ()> + Send + Sync;
 
 /// Represents the event proccessing pipeline.
@@ -146,7 +144,7 @@ impl Pipe {
             };
 
             trace!("starting '{}' source with config {:#?}", ty, config);
-            let source = factory(config.clone(), tx.clone())?;
+            let source = factory(config.clone(), tx.clone()).unwrap();
             sources.push(source);
         }
 

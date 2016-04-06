@@ -75,6 +75,13 @@ pub struct Config {
     range: (u16, u16),
 }
 
+quick_error! {
+    #[derive(Debug)]
+    pub enum Error {
+        InvalidRange(range: (u16, u16)) {}
+    }
+}
+
 pub struct Random {
     /// Termination channel.
     terminator: mio::Sender<()>,
@@ -102,11 +109,11 @@ impl Source for Random {
 impl SourceFrom for Random {
     type Config = Config;
 
-    fn run(config: Config, tx: mpsc::Sender<Record>) -> Result<Random, ()> {
+    fn run(config: Config, tx: mpsc::Sender<Record>) -> Result<Random, Box<::std::error::Error>> {
         let (min, max) = config.range;
 
         if min > max {
-            return Err(());
+            return Err(box Error::InvalidRange((min, max)));
         }
 
         let rate = config.rate;

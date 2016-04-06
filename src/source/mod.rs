@@ -4,6 +4,7 @@ mod tcp;
 pub use self::random::Random;
 pub use self::tcp::TcpSource;
 
+use std::error::Error;
 use std::sync::mpsc;
 
 use serde::Deserialize;
@@ -20,5 +21,5 @@ pub trait SourceFrom: Source + Sized {
     type Config: Deserialize;
 
     /// Constructs and immediately run the source by configuring it with the given config.
-    fn run(config: Self::Config, tx: mpsc::Sender<Record>) -> Result<Self, ()>;
+    fn run(config: Self::Config, tx: mpsc::Sender<Record>) -> Result<Self, Box<Error>>;
 }

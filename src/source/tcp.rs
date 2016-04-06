@@ -101,7 +101,7 @@ impl Source for TcpSource {
 impl SourceFrom for TcpSource {
     type Config = Config;
 
-    fn run(config: Config, tx: mpsc::Sender<Record>) -> Result<TcpSource, ()> {
+    fn run(config: Config, tx: mpsc::Sender<Record>) -> Result<TcpSource, Box<::std::error::Error>> {
         let (host, port) = config.endpoint;
         debug!("performing blocking DNS request ...");
 
@@ -111,6 +111,6 @@ impl SourceFrom for TcpSource {
             }
         }
 
-        Err(())
+        unimplemented!()
     }
 }
