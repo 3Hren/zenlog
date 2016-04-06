@@ -62,7 +62,7 @@ impl MainRegistry {
 
         let mut registry = MainRegistry::default();
         registry.add_source::<source::Random>();
-        // registry.add_source::<source::TcpSource>();
+        registry.add_source::<source::TcpSource>();
 
         registry.outputs.insert("stream", box |_| Ok(box output::Stream));
         debug!("registered Stream component in 'output' category");
