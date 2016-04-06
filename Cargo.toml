@@ -2,7 +2,6 @@
 name = "zenlog"
 version = "0.1.0"
 authors = ["Evgeny Safronov <division494@gmail.com>"]
-# build = "build.rs"
 
 [dependencies]
 rand = "0.3"
@@ -23,5 +22,4 @@ term = "*"
 yaml-rust = "*"
 
 [build-dependencies]
-# serde_codegen = "*"
 syntex = "*"
