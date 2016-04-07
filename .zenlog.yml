@@ -1,6 +1,6 @@
 severity: 0
-pipeline:
-  - name: zen
+pipelines:
+  - name: main
     sources:
       - type: random
         rate: 1.0

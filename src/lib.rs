@@ -24,7 +24,7 @@ use std::error::Error;
 use std::thread::{self, JoinHandle};
 use std::sync::{mpsc, Arc};
 
-pub use serde_json::Value;
+use serde_json::{value, Value};
 
 pub mod logging;
 
@@ -79,8 +79,7 @@ impl MainRegistry {
     fn add_source<T: SourceFrom + 'static>(&mut self) {
         self.sources.insert(T::ty(),
             box |config, tx| {
-                let config = serde_json::value::from_value(config)?;
-                T::run(config, tx)
+                T::run(value::from_value(config)?, tx)
                     .map(|v| box v as Box<Source>)
                     .map_err(|e| box e as Box<Error>)
             }
@@ -245,8 +244,7 @@ pub struct Runtime {
 impl Runtime {
     /// Constructs Zenlog Runtime by constructing and starting all pipelines listed in the given
     /// config.
-    // TODO: Move to From trait maybe.
-    pub fn from(config: Vec<PipeConfig>, registry: &Registry) -> Result<Runtime, ()> {
+    pub fn new(config: &[PipeConfig], registry: &Registry) -> Result<Runtime, ()> {
         trace!("initializing the runtime: {:#?}", config);
 
         let (tx, rx) = mpsc::channel();
@@ -311,7 +309,7 @@ impl Drop for Runtime {
             error!("failed to send shutdown signal to the runtime: {}", err);
         }
 
-        if let Err(err) = self.thread.take().unwrap().join() {
+        if let Err(err) = self.thread.take().expect("thread must exist").join() {
             error!("failed to gracefully shut down the runtime: {:?}", err);
         }
     }

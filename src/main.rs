@@ -35,7 +35,7 @@ fn main() {
     info!("starting Zenlog");
     info!("special signal handlers are set for {:?} signals", sigset);
 
-    let mut runtime = Some(Runtime::from(config.pipeline().clone(), &registry)
+    let mut runtime = Some(Runtime::new(config.pipelines(), &registry)
         .expect("failed to create runtime"));
 
     for signal in listener {
@@ -43,7 +43,7 @@ fn main() {
         match signal {
             Signal::HUP => {
                 // TODO: Reread config
-                runtime = match Runtime::from(config.pipeline().clone(), &registry) {
+                runtime = match Runtime::new(config.pipelines(), &registry) {
                     Ok(runtime) => Some(runtime),
                     Err(err) => {
                         error!("failed to create runtime: {:?}", err);
