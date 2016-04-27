@@ -1,5 +1,5 @@
 #![feature(plugin)]
-#![plugin(clippy)]
+// #![plugin(clippy)]
 #![plugin(serde_macros)]
 // #![warn(clippy_pedantic)]
 #![feature(box_syntax)]

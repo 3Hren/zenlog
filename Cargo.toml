@@ -14,12 +14,14 @@ serde_macros = "*"
 chan-signal = "*"
 chrono = "*"
 log = "*"
-clippy = "*"
+# clippy = "*"
 mio = "*"
 term = "*"
 # hyper = "*"
 # elastic_hyper = "*"
 yaml-rust = "*"
+peg = "=0.3.10"
+rtfmt = { version = "^0.1", path = "../rtfmt" }
 
 [build-dependencies]
 syntex = "*"

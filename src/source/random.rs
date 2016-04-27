@@ -146,6 +146,7 @@ mod test {
 use std::sync::mpsc;
 
 use super::{Config, Random};
+use super::super::{Source, SourceFrom};
 
 #[test]
 fn ty() {
