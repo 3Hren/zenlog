@@ -7,11 +7,9 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
 
-use serde_json;
 use rtfmt::{Generator, ParseError};
-use rtfmt::Error as FormatError;
 
-use super::Output;
+use super::{Output, OutputFrom};
 use super::super::{Record};
 
 quick_error! {
@@ -30,9 +28,8 @@ quick_error! {
 /// If attribute not found - drop event and warn.
 struct FilesWriter<'a> {
     path: Generator<'a>,
-    // pattern: Generator<'static>,
-
-    // files: HashMap<PathBuf, File>,
+    pattern: Generator<'a>,
+    files: HashMap<PathBuf, File>,
 }
 
 impl<'a> FilesWriter<'a> {
@@ -42,86 +39,57 @@ impl<'a> FilesWriter<'a> {
     fn new(path: &'a str, pattern: &'a str) -> Result<FilesWriter<'a>, Error> {
         let result = FilesWriter {
             path: Generator::new(path).map_err(Error::Path)?,
+            pattern: Generator::new(pattern).map_err(Error::Pattern)?,
+            files: HashMap::new(),
         };
 
-        // let path = Parser::new(path.chars())
-        //     .map(Token::from)
-        //     .collect::<Result<Vec<Token>, ParserError>>()
-        //     .map_err(Error::Path)?;
-        //
-        // let pattern = Parser::new(pattern.chars())
-        //     .map(Token::from)
-        //     .collect::<Result<Vec<Token>, ParserError>>()
-        //     .map_err(Error::Pattern)?;
-        //
-        // let result = FilesWriter {
-        //     path: path,
-        //     pattern: pattern,
-        //     files: HashMap::new(),
-        // };
-        //
-        // Ok(result)
-        unimplemented!();
-    }
-
-    fn path(&self, record: &Record) -> Result<String, FormatError> {
-        // // TODO: Use collect with result collapsing.
-        // let mut path = String::new();
-        // for token in &self.path {
-        //     path.push_str(&consume(&token, record)?);
-        // }
-        //
-        // Ok(path)
-        unimplemented!();
+        Ok(result)
     }
 
     // TODO: Return Result.
     fn write(&mut self, record: &Record) -> Result<(), ()> {
-        unimplemented!();
-        // let path = match self.path(record) {
-        //     Ok(path) => path,
-        //     Err(err) => {
-        //         // TODO: return Err(Error::ParserError);
-        //         warn!("dropped {:?} while parsing path format - {:?}", record, err);
-        //         return Err(());
-        //     }
-        // };
-        //
-        // let path = Path::new(&path);
-        // let file = match self.files.entry(path.to_path_buf()) {
-        //     Entry::Vacant(entry) => {
-        //         let file = OpenOptions::new()
-        //             .write(true)
-        //             .append(true)
-        //             .create(true)
-        //             .open(path)
-        //             .unwrap();
-        //         info!("opened '{}' for writing in append mode", path.display());
-        //
-        //         entry.insert(file)
-        //     }
-        //     Entry::Occupied(entry) => entry.into_mut(),
-        // };
-        //
-        // let mut message = String::new();
-        // for token in &self.pattern {
-        //     let token = match consume(token, record) {
-        //         Ok(token) => token,
-        //         Err(err) => {
-        //             error!("dropping {:?} while parsing message format - {:?}", record, err);
-        //             return Err(());
-        //         }
-        //     };
-        //     message.push_str(&token);
-        // }
-        // message.push('\n');
-        //
-        // match file.write_all(message.as_bytes()) {
-        //     Ok(()) => debug!("{} bytes written", message.len()),
-        //     Err(err) => error!("writing error - {:?}", err)
-        // }
-        //
-        // Ok(())
+        let path = match self.path.consume(record) {
+            Ok(path) => path,
+            Err(err) => {
+                // TODO: return Err(Error::ParserError);
+                error!("dropped {:?} while parsing path format - {:?}", record, err);
+                return Err(());
+            }
+        };
+
+        let path = Path::new(&path);
+        let file = match self.files.entry(path.to_path_buf()) {
+            Entry::Vacant(entry) => {
+                // TODO: Create all subdirectories.
+                let file = OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .create(true)
+                    .open(path)
+                    .unwrap();
+                info!("opened '{}' for writing in append mode", path.display());
+
+                entry.insert(file)
+            }
+            Entry::Occupied(entry) => entry.into_mut(),
+        };
+
+        let mut message = String::new();
+        match self.pattern.consume(&record) {
+            Ok(result) => message.push_str(&result),
+            Err(err) => {
+                error!("dropped {:?} while parsing message format - {:?}", record, err);
+                return Err(());
+            }
+        };
+        message.push('\n');
+
+        match file.write_all(message.as_bytes()) {
+            Ok(()) => debug!("{} bytes written", message.len()),
+            Err(err) => error!("writing error - {:?}", err)
+        }
+
+        Ok(())
     }
 
     fn reopen(&mut self) {
@@ -134,16 +102,24 @@ pub struct FilePattern {
 }
 
 impl FilePattern {
-    pub fn new(path: String, pattern: String) -> FilePattern {
+    pub fn new(path: String, pattern: String) -> Result<FilePattern, Error> {
         let (tx, rx) = mpsc::channel::<Arc<Record>>();
 
         thread::spawn(move || {
-            let output = FilesWriter::new(&path, &pattern).unwrap();
+            let mut output = FilesWriter::new(&path, &pattern).unwrap();
+
+            for record in rx {
+                if let Err(err) = output.write(&record) {
+                    error!("failed to write {:?}: {:?}", record, err);
+                }
+            }
         });
 
-        FilePattern {
+        let result = FilePattern {
             tx: tx,
-        }
+        };
+
+        Ok(result)
     }
 }
 
@@ -154,5 +130,22 @@ impl Output for FilePattern {
 
     fn handle(&mut self, record: &Arc<Record>) {
         self.tx.send(record.clone()).unwrap();
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Config {
+    path: String,
+    pattern: String,
+}
+
+impl OutputFrom for FilePattern {
+    type Error = Error;
+    type Config = Config;
+
+    fn from(config: Config) -> Result<FilePattern, Error> {
+        let Config { path, pattern } = config;
+
+        FilePattern::new(path, pattern)
     }
 }

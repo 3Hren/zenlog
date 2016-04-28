@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use serde_json::ser::to_string;
 
-use super::Output;
+use super::{Output, OutputFrom};
 use super::super::{Record};
 
 /// Output that prints all records to the Standard Output.
@@ -24,5 +24,24 @@ impl Output for Stream {
                 error!("failed to stringify the record: {}", err);
             }
         }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Deserialize)]
+pub struct Config {
+    _dummy: (),
+}
+
+quick_error! {
+    #[derive(Debug)]
+    pub enum Error {}
+}
+
+impl OutputFrom for Stream {
+    type Error = Error;
+    type Config = Config;
+
+    fn from(_config: Config) -> Result<Stream, Error> {
+        Ok(Stream)
     }
 }

@@ -14,8 +14,11 @@ mod stream;
 pub use self::file::FilePattern;
 pub use self::stream::Stream;
 
+use std::error::Error;
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
+
+use serde::Deserialize;
 
 use super::{Record};
 
@@ -34,4 +37,15 @@ pub trait Output: Send {
     fn hup(&self) -> Option<Sender<()>> {
         None
     }
+}
+
+pub trait OutputFrom: Output + Sized {
+    /// The reason of run failure.
+    type Error: Error;
+
+    /// Represents a output's deserializable config.
+    type Config: Deserialize;
+
+    /// Constructs the output by configuring it with the given config.
+    fn from(config: Self::Config) -> Result<Self, Self::Error>;
 }

@@ -33,7 +33,7 @@ mod config;
 mod output;
 mod source;
 
-use output::Output;
+use output::{Output, OutputFrom};
 use source::{Source, SourceFrom};
 
 pub use config::Config;
@@ -65,16 +65,8 @@ impl MainRegistry {
         registry.add_source::<source::Random>();
         registry.add_source::<source::TcpSource>();
 
-        registry.outputs.insert("stream", box |_| Ok(box output::Stream));
-        debug!("registered Stream component in 'output' category");
-
-        registry.outputs.insert("file", box |config| {
-            let path = config.find("path").unwrap().as_string().unwrap();
-            let pattern = config.find("pattern").unwrap().as_string().unwrap();
-            let o = output::FilePattern::new(path.into(), pattern.into());
-            Ok(box o)
-        });
-        debug!("registered File component in 'output' category");
+        registry.add_output::<output::Stream>();
+        registry.add_output::<output::FilePattern>();
 
         registry
     }
@@ -91,6 +83,22 @@ impl MainRegistry {
 
         debug!("registered {} component in 'source' category", T::ty());
     }
+
+    fn add_output<T: OutputFrom + 'static>(&mut self) {
+        self.outputs.insert(T::ty(), box |mut config| {
+            if let Value::Object(ref mut config) = config {
+                config.remove("type");
+            }
+
+            trace!("creating {} with config: {:#?}", T::ty(), config);
+
+            T::from(value::from_value(config)?)
+                .map(|v| box v as Box<Output>)
+                .map_err(|e| box e as Box<Error>)
+        });
+
+        debug!("registered {} component in 'output' category", T::ty());
+    }
 }
 
 impl Registry for MainRegistry {
@@ -104,7 +112,7 @@ impl Registry for MainRegistry {
 }
 
 pub type SourceFactory = Fn(Value, mpsc::Sender<Record>) -> Result<Box<Source>, Box<Error>> + Send + Sync;
-pub type OutputFactory = Fn(Value) -> Result<Box<Output>, ()> + Send + Sync;
+pub type OutputFactory = Fn(Value) -> Result<Box<Output>, Box<Error>> + Send + Sync;
 
 /// Represents the event proccessing pipeline.
 ///
@@ -174,8 +182,8 @@ impl Pipe {
                 }
             };
 
+            let output = factory(config.clone()).unwrap();
             trace!("created '{}' output with config {:#?}", ty, config);
-            let output = factory(config.clone())?;
             outputs.push(output);
         }
 
