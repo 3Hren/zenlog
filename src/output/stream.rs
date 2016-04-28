@@ -11,6 +11,10 @@ use super::super::{Record};
 pub struct Stream;
 
 impl Output for Stream {
+    fn ty() -> &'static str where Self: Sized {
+        "stream"
+    }
+
     fn handle(&mut self, record: &Arc<Record>) {
         match to_string(&record) {
             Ok(buf) => {

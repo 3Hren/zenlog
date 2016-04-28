@@ -12,6 +12,7 @@ extern crate rand;
 
 extern crate chrono;
 extern crate mio;
+extern crate rtfmt;
 extern crate serde;
 extern crate serde_json;
 extern crate serde_yaml;
@@ -68,7 +69,10 @@ impl MainRegistry {
         debug!("registered Stream component in 'output' category");
 
         registry.outputs.insert("file", box |config| {
-            Ok(box output::FileOutput::new(config.find("path").unwrap().as_string().unwrap()))
+            let path = config.find("path").unwrap().as_string().unwrap();
+            let pattern = config.find("pattern").unwrap().as_string().unwrap();
+            let o = output::FilePattern::new(path.into(), pattern.into());
+            Ok(box o)
         });
         debug!("registered File component in 'output' category");
 
