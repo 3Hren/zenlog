@@ -86,15 +86,17 @@ impl MainRegistry {
     }
 
     fn add_output<T: OutputFrom + 'static>(&mut self) {
-        self.outputs.insert(T::ty(), box |mut config| {
-            if let Value::Object(ref mut config) = config {
-                config.remove("type");
-            }
+        self.outputs.insert(T::ty(),
+            box |mut config| {
+                if let Value::Object(ref mut config) = config {
+                    config.remove("type");
+                }
 
-            T::from(value::from_value(config)?)
-                .map(|v| box v as Box<Output>)
-                .map_err(|e| box e as Box<Error>)
-        });
+                T::from(value::from_value(config)?)
+                    .map(|v| box v as Box<Output>)
+                    .map_err(|e| box e as Box<Error>)
+            }
+        );
 
         debug!("registered {} component in 'output' category", T::ty());
     }
