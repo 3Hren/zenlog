@@ -90,8 +90,6 @@ impl MainRegistry {
                 config.remove("type");
             }
 
-            trace!("creating {} with config: {:#?}", T::ty(), config);
-
             T::from(value::from_value(config)?)
                 .map(|v| box v as Box<Output>)
                 .map_err(|e| box e as Box<Error>)
