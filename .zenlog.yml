@@ -2,13 +2,9 @@ severity: 0
 pipelines:
   - name: main
     sources:
-      - type: random
-        rate: 1.0
-        range: [8, 8]
       - type: tcp
         endpoint: ["::", 50031]
     outputs:
-      - type: stream
-      - type: files
-        path: /tmp/zenlog.log.0
-        pattern: "{message}"
+      - type: file
+        path: /var/tmp/zenlog-{severity}/zenlog.log
+        pattern: "{timestamp}: {message}"

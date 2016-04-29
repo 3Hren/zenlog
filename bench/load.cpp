@@ -13,7 +13,7 @@ int main(int argc, char** argv) {
     protocol_type::resolver resolver(loop);
     boost::asio::connect(socket, resolver.resolve({argv[1], argv[2]}));
 
-    std::string message = R"({"id":42,"source":"core","nested":{"key":"value"},"message":"le message - )";
+    std::string message = R"({"id":42,"source":"core","nested":{"key":"value"},"severity":0,"timestamp":100500,"message":"le message - )";
     std::string data;
     data.reserve(512);
     uint count = boost::lexical_cast<uint>(argv[3]);

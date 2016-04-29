@@ -11,7 +11,7 @@
 mod file;
 mod stream;
 
-pub use self::file::FilePattern;
+pub use self::file::FileOutput;
 pub use self::stream::Stream;
 
 use std::error::Error;

@@ -66,7 +66,7 @@ impl MainRegistry {
         registry.add_source::<source::TcpSource>();
 
         registry.add_output::<output::Stream>();
-        registry.add_output::<output::FilePattern>();
+        registry.add_output::<output::FileOutput>();
 
         registry
     }
