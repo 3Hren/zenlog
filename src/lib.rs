@@ -65,6 +65,7 @@ impl MainRegistry {
         registry.add_source::<source::Random>();
         registry.add_source::<source::TcpSource>();
 
+        registry.add_output::<output::Null>();
         registry.add_output::<output::Stream>();
         registry.add_output::<output::FileOutput>();
 

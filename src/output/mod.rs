@@ -9,9 +9,11 @@
 //! The result: each output manages its blocking mode itself.
 
 mod file;
+mod nil;
 mod stream;
 
 pub use self::file::FileOutput;
+pub use self::nil::Null;
 pub use self::stream::Stream;
 
 use std::error::Error;

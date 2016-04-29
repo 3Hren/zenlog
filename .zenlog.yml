@@ -1,10 +1,11 @@
-severity: 0
+severity: 2
 pipelines:
   - name: main
     sources:
       - type: tcp
         endpoint: ["::", 50031]
     outputs:
+      - type: nil
       - type: stream
       - type: file
         path: /var/tmp/zenlog-{severity}/zenlog.log
