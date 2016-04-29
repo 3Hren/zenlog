@@ -5,8 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::thread;
 
-use serde_json;
-use serde::de::Deserialize;
+use serde_json::StreamDeserializer;
 
 use super::{Source, SourceFrom};
 use super::super::{Record};
@@ -49,10 +48,8 @@ impl TcpSource {
                         let tx = tx.clone();
                         let rd = BufReader::new(stream);
                         thread::spawn(move || {
-                            let mut de = serde_json::Deserializer::new(rd.bytes());
-
-                            loop {
-                                match Record::deserialize(&mut de) {
+                            for record in StreamDeserializer::new(rd.bytes()) {
+                                match record {
                                     Ok(record) => {
                                         tx.send(record).expect("pipeline must outlive all attached inputs");
                                     }
