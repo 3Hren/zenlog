@@ -5,6 +5,7 @@ pipelines:
       - type: tcp
         endpoint: ["::", 50031]
     outputs:
+      - type: stream
       - type: file
         path: /var/tmp/zenlog-{severity}/zenlog.log
         pattern: "{timestamp}: {message}"

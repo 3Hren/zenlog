@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use serde_json::Value;
 use serde_json::ser::to_string;
 
 use super::{Output, OutputFrom};
@@ -27,11 +28,6 @@ impl Output for Stream {
     }
 }
 
-#[derive(Debug, Copy, Clone, Deserialize)]
-pub struct Config {
-    _dummy: (),
-}
-
 quick_error! {
     #[derive(Debug)]
     pub enum Error {}
@@ -39,9 +35,9 @@ quick_error! {
 
 impl OutputFrom for Stream {
     type Error = Error;
-    type Config = Config;
+    type Config = Value;
 
-    fn from(_config: Config) -> Result<Stream, Error> {
+    fn from(_config: Value) -> Result<Stream, Error> {
         Ok(Stream)
     }
 }
