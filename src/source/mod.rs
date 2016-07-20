@@ -11,7 +11,7 @@ pub trait Source: Send {}
 
 pub trait SourceFactory {
     /// The reason of run failure.
-    type Error: Error;
+    type Error: Into<Box<Error>>;
 
     /// Returns type as a string that is used mainly for concrete component identification.
     fn ty() -> &'static str

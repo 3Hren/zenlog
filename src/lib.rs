@@ -60,7 +60,7 @@ impl Registry {
         self.sources.insert(T::ty(),
             Box::new(|cfg, tx| {
                 T::run(cfg, tx)
-                    .map_err(|e| Box::new(e) as Box<Error>)
+                    .map_err(Into::into)
             })
         );
 

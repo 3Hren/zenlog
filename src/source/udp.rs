@@ -1,6 +1,8 @@
+use std::error::Error;
+use std::net::SocketAddr;
+use std::str::FromStr;
 use std::sync::mpsc::Sender;
 use std::thread::{self, JoinHandle};
-use std::str::FromStr;
 
 use mio;
 use mio::{EventLoop, Handler, Token, EventSet, PollOpt};
@@ -71,22 +73,9 @@ pub struct UdpSource {
     thread: Option<JoinHandle<()>>,
 }
 
-impl Source for UdpSource {}
-
-impl SourceFactory for UdpSource {
-    type Error = ::std::io::Error;
-
-    fn ty() -> &'static str {
-        "udp"
-    }
-
-    fn run(cfg: &Config, tx: Sender<Record>) -> Result<Box<Source>, Self::Error> {
-        let endpoint = cfg.find("endpoint")
-            .expect("field 'endpoint' is required")
-            .as_string()
-            .expect("field 'endpoint' must be a string");
-
-        let listener = try!(UdpSocket::bound(&FromStr::from_str(endpoint).unwrap()));
+impl UdpSource {
+    fn new(endpoint: &SocketAddr, tx: Sender<Record>) -> Result<UdpSource, Box<Error>> {
+        let listener = try!(UdpSocket::bound(endpoint));
         info!(target: "UDP input", "exposed UDP input on {}", endpoint);
 
         let mut ev = try!(EventLoop::new());
@@ -102,7 +91,27 @@ impl SourceFactory for UdpSource {
             thread: Some(thread),
         };
 
-        Ok(Box::new(src))
+        Ok(src)
+    }
+}
+
+impl Source for UdpSource {}
+
+impl SourceFactory for UdpSource {
+    type Error = Box<Error>;
+
+    fn ty() -> &'static str {
+        "udp"
+    }
+
+    fn run(cfg: &Config, tx: Sender<Record>) -> Result<Box<Source>, Box<Error>> {
+        let endpoint = cfg.find("endpoint")
+            .expect("field 'endpoint' is required")
+            .as_string()
+            .expect("field 'endpoint' must be a string");
+
+        UdpSource::new(&FromStr::from_str(endpoint).unwrap(), tx)
+            .map(|v| Box::new(v) as Box<Source>)
     }
 }
 
