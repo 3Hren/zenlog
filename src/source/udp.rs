@@ -1,12 +1,20 @@
-struct UdpInput {
-    stop: mio::Sender<()>,
-    thread: Option<JoinHandle<()>>,
-}
+use std::sync::mpsc::Sender;
+use std::thread::{self, JoinHandle};
+use std::str::FromStr;
+
+use mio;
+use mio::{EventLoop, Handler, Token, EventSet, PollOpt};
+use mio::udp::UdpSocket;
+
+use serde_json;
+
+use source::{Source, SourceFactory};
+use {Config, Record};
 
 struct UdpHandler {
     socket: UdpSocket,
     tx: Sender<Record>,
-    buf: [u8; 16 * 1024],
+    buf: [u8; 16 * 1024], // TODO: Replace with Vec. Reason is - kernel recv buffers can be tuned.
 }
 
 impl UdpHandler {
@@ -58,9 +66,27 @@ impl Handler for UdpHandler {
     }
 }
 
-impl UdpInput {
-    fn new(endpoint: &SocketAddr, tx: Sender<Record>) -> Result<Self, std::io::Error> {
-        let listener = try!(UdpSocket::bound(endpoint));
+pub struct UdpSource {
+    stop: mio::Sender<()>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl Source for UdpSource {}
+
+impl SourceFactory for UdpSource {
+    type Error = ::std::io::Error;
+
+    fn ty() -> &'static str {
+        "udp"
+    }
+
+    fn run(cfg: &Config, tx: Sender<Record>) -> Result<Box<Source>, Self::Error> {
+        let endpoint = cfg.find("endpoint")
+            .expect("field 'endpoint' is required")
+            .as_string()
+            .expect("field 'endpoint' must be a string");
+
+        let listener = try!(UdpSocket::bound(&FromStr::from_str(endpoint).unwrap()));
         info!(target: "UDP input", "exposed UDP input on {}", endpoint);
 
         let mut ev = try!(EventLoop::new());
@@ -71,18 +97,16 @@ impl UdpInput {
             ev.run(&mut UdpHandler::new(tx, listener)).unwrap();
         });
 
-        let input = UdpInput {
+        let src = UdpSource {
             stop: stop,
             thread: Some(thread),
         };
 
-        Ok(input)
+        Ok(Box::new(src))
     }
 }
 
-impl Input for UdpInput {}
-
-impl Drop for UdpInput {
+impl Drop for UdpSource {
     fn drop(&mut self) {
         self.stop.send(()).unwrap();
         self.thread.take().unwrap().join().unwrap();

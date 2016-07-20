@@ -1,28 +1,23 @@
-mod random;
-mod tcp;
-
-pub use self::random::Random;
-pub use self::tcp::TcpSource;
-
 use std::error::Error;
-use std::sync::mpsc;
+use std::sync::mpsc::Sender;
 
-use serde::Deserialize;
+use super::{Config, Record};
 
-use super::{Record};
+pub use self::udp::UdpSource;
 
-pub trait Source: Send {
-    /// Returns type as a string that is used mainly for concrete factory identification.
-    fn ty() -> &'static str where Self: Sized;
-}
+mod udp;
 
-pub trait SourceFrom: Source + Sized {
+pub trait Source: Send {}
+
+pub trait SourceFactory {
     /// The reason of run failure.
     type Error: Error;
 
-    /// Represents a source's deserializable config.
-    type Config: Deserialize;
+    /// Returns type as a string that is used mainly for concrete component identification.
+    fn ty() -> &'static str
+        where Self: Sized;
 
-    /// Constructs and immediately run the source by configuring it with the given config.
-    fn run(config: Self::Config, tx: mpsc::Sender<Record>) -> Result<Self, Self::Error>;
+    /// Constructs and immediately run a new source by configuring it with the given config.
+    fn run(cfg: &Config, tx: Sender<Record>) -> Result<Box<Source>, Self::Error>
+        where Self: Sized;
 }

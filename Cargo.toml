@@ -3,25 +3,23 @@ name = "zenlog"
 version = "0.1.0"
 authors = ["Evgeny Safronov <division494@gmail.com>"]
 
-[dependencies]
-rand = "0.3"
-quick-error = "^1.0"
-serde = "^0.7"
-serde_json = "^0.7"
-serde_yaml = "^0.2"
-serde_macros = "*"
+build = "build.rs"
 
+[dependencies]
+serde = "0.7"
+# For generic configuration source.
+serde_json = "0.7"
+
+# Catch runtime signals.
 chan-signal = "*"
-chrono = "*"
-log = "*"
-# clippy = "*"
 mio = "*"
-term = "*"
-# hyper = "*"
-# elastic_hyper = "*"
-yaml-rust = "*"
-peg = "=0.3.10"
-rtfmt = { version = "^0.1", path = "../rtfmt" }
+
+# Logging subsystem.
+libc = "*"
+log = "*"
+chrono = "*"
+[dependencies.termion]
+git = "https://github.com/ticki/termion.git"
 
 [build-dependencies]
-syntex = "*"
+serde_codegen = "*"

@@ -8,26 +8,21 @@
 //!
 //! The result: each output manages its blocking mode itself.
 
-mod file;
-mod nil;
+// mod file;
+// mod nil;
 mod stream;
 
-pub use self::file::FileOutput;
-pub use self::nil::Null;
+// pub use self::file::FileOutput;
+// pub use self::nil::Null;
 pub use self::stream::Stream;
 
 use std::error::Error;
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
-use serde::Deserialize;
-
-use super::{Record};
+use super::{Config, Record};
 
 pub trait Output: Send {
-    /// Returns type as a string that is used mainly for concrete factory identification.
-    fn ty() -> &'static str where Self: Sized;
-
     fn handle(&mut self, record: &Arc<Record>);
 
     /// Creates an optional sender, which should be triggered when it's time to reload the output.
@@ -41,13 +36,13 @@ pub trait Output: Send {
     }
 }
 
-pub trait OutputFrom: Output + Sized {
-    /// The reason of run failure.
-    type Error: Error;
+pub trait OutputFactory {
+    type Error: Into<Box<Error>>;
 
-    /// Represents a output's deserializable config.
-    type Config: Deserialize;
+    /// Returns type as a string that is used mainly for concrete factory identification.
+    fn ty() -> &'static str where Self: Sized;
 
     /// Constructs the output by configuring it with the given config.
-    fn from(config: Self::Config) -> Result<Self, Self::Error>;
+    fn from(cfg: &Config) -> Result<Box<Output>, Self::Error>
+        where Self: Sized;
 }

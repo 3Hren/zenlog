@@ -1,21 +1,18 @@
 use std::sync::Arc;
 
-use serde_json::Value;
-use serde_json::ser::to_string;
+use serde_json::to_string;
 
-use super::{Output, OutputFrom};
-use super::super::{Record};
+use {Config, Record};
+use output::{Output, OutputFactory};
 
 /// Output that prints all records to the Standard Output.
+///
+/// # Warning
 ///
 /// Quite slow. Use only for debugging purposes.
 pub struct Stream;
 
 impl Output for Stream {
-    fn ty() -> &'static str where Self: Sized {
-        "stream"
-    }
-
     fn handle(&mut self, record: &Arc<Record>) {
         match to_string(&record) {
             Ok(buf) => {
@@ -28,16 +25,15 @@ impl Output for Stream {
     }
 }
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum Error {}
-}
+impl OutputFactory for Stream {
+    type Error = &'static str;
 
-impl OutputFrom for Stream {
-    type Error = Error;
-    type Config = Value;
+    fn ty() -> &'static str {
+        "stream"
+    }
 
-    fn from(_config: Value) -> Result<Stream, Error> {
-        Ok(Stream)
+    #[allow(unused_variables)]
+    fn from(cfg: &Config) -> Result<Box<Output>, Self::Error> {
+        Ok(Box::new(Stream))
     }
 }

@@ -1,0 +1,19 @@
+{
+    "severity": 0,
+    "pipelines": [
+        {
+            "name": "main",
+            "sources": [
+                {
+                    "type": "udp",
+                    "endpoint": "[::]:50031"
+                }
+            ],
+            "outputs": [
+                {
+                    "type": "stream"
+                }
+            ]
+        }
+    ]
+}

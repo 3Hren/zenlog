@@ -1,15 +1,14 @@
 #[macro_use] extern crate log;
-
-extern crate chan_signal as signals;
+extern crate chan_signal as signal;
 
 extern crate zenlog;
 
-use signals::Signal;
+use signal::Signal;
 
-use zenlog::{Config, MainRegistry, Runtime};
+use zenlog::{Registry, Runtime, RuntimeConfig};
 
 fn main() {
-    let filename = ".zenlog.yml";
+    let filename = ".zenlog.json";
 
     // List of signals we want to listen.
     // - INT and TERM - for graceful termination.
@@ -21,16 +20,16 @@ fn main() {
     // signals, otherwise we can blow up, resulting in sudden catch one of non blocked signal,
     // which probably just kills the application.
     // Also there shouldn't be any other signal handlers installed. This is the law, asshole!
-    let sigset  = [Signal::INT, Signal::TERM, Signal::HUP, Signal::ALRM];
-    let listener = signals::notify(&sigset);
+    let sigset = [Signal::INT, Signal::TERM, Signal::HUP, Signal::ALRM];
+    let listener = signal::notify(&sigset);
 
-    let config = Config::from(filename)
+    let config = RuntimeConfig::from(filename)
         .expect("failed to read configuration file");
 
     zenlog::logging::reset(zenlog::logging::from_usize(config.severity()))
         .expect("failed to initialize logging system");
 
-    let registry = MainRegistry::new();
+    let registry = Registry::new();
 
     info!("starting Zenlog");
     info!("special signal handlers are set for {:?} signals", sigset);

@@ -1,12 +1,11 @@
-//! In the future it should contain optional TRACE level logging.
-
 use std::io::{Write};
 
+use libc;
 use chrono;
 use log;
 use log::{LogRecord, LogLevel, LogMetadata, SetLoggerError};
-use term;
-use term::{Terminal, TerminfoTerminal};
+use termion::{TermWrite};
+use termion::color::{self, Palette};
 
 struct Logger {
     level: LogLevel,
@@ -30,13 +29,13 @@ fn severity(level: LogLevel) -> &'static str {
     }
 }
 
-fn color(level: LogLevel) -> term::color::Color {
+fn color(level: LogLevel) -> Palette {
     match level {
         LogLevel::Trace |
-        LogLevel::Debug => term::color::WHITE,
-        LogLevel::Info  => term::color::BLUE,
-        LogLevel::Warn  => term::color::YELLOW,
-        LogLevel::Error => term::color::RED,
+        LogLevel::Debug => Palette::Rgb(2, 2, 2),
+        LogLevel::Info  => Palette::Rgb(0, 1, 3),
+        LogLevel::Warn  => Palette::Yellow,
+        LogLevel::Error => Palette::Red,
     }
 }
 
@@ -45,26 +44,21 @@ impl log::Log for Logger {
         metadata.level() <= self.level && metadata.target().starts_with("zenlog")
     }
 
-    fn log(&self, record: &LogRecord) {
-        if self.enabled(record.metadata()) {
-            let now = chrono::UTC::now();
-
-            let mut term = TerminfoTerminal::new(Vec::new()).unwrap();
-
-            term.fg(color(record.level())).unwrap();
-            write!(term, "{}", severity(record.level())).unwrap();
-            term.reset().unwrap();
-
-            write!(term, ", {} {:<32}: ", now, record.target()).unwrap();
-
-            term.fg(color(record.level())).unwrap();
-            write!(term, "{}\n", record.args()).unwrap();
-            term.reset().unwrap();
-            term.get_mut().flush().unwrap();
-
+    fn log(&self, rec: &LogRecord) {
+        if self.enabled(rec.metadata()) {
             let stdout = ::std::io::stdout();
             let mut wr = stdout.lock();
-            wr.write(term.get_ref()).unwrap();
+
+            let now = chrono::UTC::now();
+
+            wr.color(Palette::Rgb(2, 2, 2)).unwrap();
+            write!(wr, "{} ", now).unwrap();
+            wr.color(color(rec.level())).unwrap();
+            write!(wr, "{} {}/", severity(rec.level()), unsafe { libc::getpid() }).unwrap();
+            write!(wr, "{}:{:<4}", rec.location().module_path(), rec.location().line()).unwrap();
+            wr.color(color::White).unwrap();
+            write!(wr, " - {}\r\n", rec.args()).unwrap();
+            wr.reset().unwrap();
             wr.flush().unwrap();
         }
     }

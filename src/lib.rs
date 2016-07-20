@@ -1,121 +1,110 @@
-#![feature(plugin)]
-// #![plugin(clippy)]
-#![plugin(serde_macros)]
-// #![warn(clippy_pedantic)]
-#![feature(box_syntax)]
-#![feature(custom_derive)]
-#![feature(question_mark)]
-
-#[macro_use] extern crate log;
-#[macro_use] extern crate quick_error;
-extern crate rand;
-
+#[macro_use]
+extern crate log;
+extern crate libc;
 extern crate chrono;
 extern crate mio;
-extern crate rtfmt;
-extern crate serde;
 extern crate serde_json;
-extern crate serde_yaml;
-extern crate term;
-
-extern crate yaml_rust as yaml;
+extern crate termion;
 
 use std::collections::HashMap;
 use std::error::Error;
 use std::thread::{self, JoinHandle};
 use std::sync::{mpsc, Arc};
+use std::sync::mpsc::Sender;
 
-use serde_json::{value, Value};
-
-pub mod logging;
+use serde_json::Value;
 
 mod config;
 mod output;
 mod source;
 
-use output::{Output, OutputFrom};
-use source::{Source, SourceFrom};
+pub mod logging;
 
-pub use config::Config;
+use output::{Output, OutputFactory};
+use source::{Source, SourceFactory};
+
 use config::PipeConfig;
+pub use config::RuntimeConfig;
 
 pub type Record = Value;
+pub type Config = Value;
 
 enum Control {
     Hup,
     Shutdown,
 }
 
-pub trait Registry: Send +  Sync {
-    fn source(&self, ty: &str) -> Option<&SourceFactory>;
-    fn output(&self, ty: &str) -> Option<&OutputFactory>;
-}
+type FnSourceFactory = Fn(&Config, Sender<Record>) -> Result<Box<Source>, Box<Error>>;
+type FnOutputFactory = Fn(&Config) -> Result<Box<Output>, Box<Error>>;
 
 #[derive(Default)]
-pub struct MainRegistry {
-    sources: HashMap<&'static str, Box<SourceFactory>>,
-    outputs: HashMap<&'static str, Box<OutputFactory>>,
+pub struct Registry {
+    sources: HashMap<&'static str, Box<FnSourceFactory>>,
+    outputs: HashMap<&'static str, Box<FnOutputFactory>>,
 }
 
-impl MainRegistry {
-    pub fn new() -> MainRegistry {
+impl Registry {
+    pub fn new() -> Registry {
         info!("registering components");
 
-        let mut registry = MainRegistry::default();
-        registry.add_source::<source::Random>();
-        registry.add_source::<source::TcpSource>();
+        let mut registry = Registry::default();
+        registry.add_source::<source::UdpSource>();
 
-        registry.add_output::<output::Null>();
         registry.add_output::<output::Stream>();
-        registry.add_output::<output::FileOutput>();
 
         registry
     }
 
     /// Registers a source with the factory.
-    fn add_source<T: SourceFrom + 'static>(&mut self) {
+    fn add_source<T: SourceFactory + 'static>(&mut self) {
         self.sources.insert(T::ty(),
-            box |config, tx| {
-                T::run(value::from_value(config)?, tx)
-                    .map(|v| box v as Box<Source>)
-                    .map_err(|e| box e as Box<Error>)
-            }
+            Box::new(|cfg, tx| {
+                T::run(cfg, tx)
+                    .map_err(|e| Box::new(e) as Box<Error>)
+            })
         );
 
         debug!("registered {} component in 'source' category", T::ty());
     }
 
-    fn add_output<T: OutputFrom + 'static>(&mut self) {
+    fn add_output<T: OutputFactory + 'static>(&mut self) {
         self.outputs.insert(T::ty(),
-            box |mut config| {
-                if let Value::Object(ref mut config) = config {
-                    config.remove("type");
-                }
-
-                T::from(value::from_value(config)?)
-                    .map(|v| box v as Box<Output>)
-                    .map_err(|e| box e as Box<Error>)
-            }
+            Box::new(|cfg| {
+                T::from(cfg)
+                    .map_err(Into::into)
+            })
         );
 
         debug!("registered {} component in 'output' category", T::ty());
     }
-}
 
-impl Registry for MainRegistry {
-    fn source(&self, ty: &str) -> Option<&SourceFactory> {
-        self.sources.get(ty).map(|val| &**val)
+    fn source(&self, cfg: &Config, tx: Sender<Record>) -> Result<Box<Source>, Box<Error>> {
+        Registry::ty(cfg)
+            .map_err(Into::into)
+            .and_then(|ty| self.sources.get(ty)
+                .ok_or("source not found".into()))
+            .and_then(|factory| factory(cfg, tx))
     }
 
-    fn output(&self, ty: &str) -> Option<&OutputFactory> {
-        self.outputs.get(ty).map(|val| &**val)
+    fn output(&self, cfg: &Config) -> Result<Box<Output>, Box<Error>> {
+        Registry::ty(cfg)
+            .map_err(Into::into)
+            .and_then(|ty| self.outputs.get(ty)
+                .ok_or("output not found".into()))
+            .and_then(|factory| factory(cfg))
+    }
+
+    fn ty(cfg: &Config) -> Result<&str, &str> {
+        cfg.find("type")
+            .ok_or("field 'type' is required")
+            .and_then(|ty| ty.as_string()
+                .ok_or("field 'type' must be a string"))
     }
 }
 
-pub type SourceFactory = Fn(Value, mpsc::Sender<Record>) -> Result<Box<Source>, Box<Error>> + Send + Sync;
-pub type OutputFactory = Fn(Value) -> Result<Box<Output>, Box<Error>> + Send + Sync;
-
-/// Represents the event proccessing pipeline.
+/// Event proccessing pipeline.
+///
+/// # Note:
 ///
 /// The control flow on destruction is:
 ///  1. Drop pipe.
@@ -126,70 +115,35 @@ pub type OutputFactory = Fn(Value) -> Result<Box<Output>, Box<Error>> + Send + S
 struct Pipe {
     thread: Option<JoinHandle<()>>,
     sources: Vec<Box<Source>>,
-    hups: Vec<mpsc::Sender<()>>,
+    hups: Vec<Sender<()>>,
 }
 
 impl Pipe {
-    fn run(config: &PipeConfig, registry: &Registry) -> Result<Pipe, ()> {
+    fn run(cfg: &PipeConfig, registry: &Registry) -> Result<Pipe, Box<Error>> {
         // Pipelines.
         let (tx, rx) = mpsc::channel();
 
         // Start Sources.
         let mut sources = Vec::new();
 
-        for config in config.sources() {
-            let ty = match config.find("type") {
-                Some(&Value::String(ref ty)) => ty,
-                Some(..) | None => {
-                    error!("config {:?} is malformed: required field 'type' is missing or have non-string value", config);
-                    // TODO: return Err(MissingType(config));
-                    return Err(());
-                }
-            };
+        for cfg in cfg.sources() {
+            trace!("starting source with config {:#?}", cfg);
 
-            // TODO: let factory = registry.source(&ty).map_err(UnregisteredFactory(ty.clone()))?;
-            let factory = match registry.source(&ty) {
-                Some(factory) => factory,
-                None => {
-                    error!("failed to create source {}: factory is not registered", ty);
-                    // TODO: return Err(UnregisteredFactory(ty));
-                    return Err(());
-                }
-            };
-
-            trace!("starting '{}' source with config {:#?}", ty, config);
-            let source = factory(config.clone(), tx.clone()).unwrap();
+            let source = try!(registry.source(cfg, tx.clone()));
             sources.push(source);
         }
 
         let mut outputs = Vec::new();
-        for config in config.outputs() {
-            let ty = match config.find("type") {
-                Some(&Value::String(ref ty)) => ty,
-                Some(..) | None => {
-                    error!("config {:?} is malformed: required field 'type' is missing or have non-string value", config);
-                    // TODO: return Err(MissingType(config));
-                    return Err(());
-                }
-            };
 
-            // TODO: let factory = registry.output(&ty).map_err(UnregisteredFactory(ty.clone()))?;
-            let factory = match registry.output(&ty) {
-                Some(factory) => factory,
-                None => {
-                    error!("failed to create output {}: factory is not registered", ty);
-                    // TODO: return Err(UnregisteredFactory(ty));
-                    return Err(());
-                }
-            };
+        for cfg in cfg.outputs() {
+            trace!("constructing output with config {:#?}", cfg);
 
-            let output = factory(config.clone()).unwrap();
-            trace!("created '{}' output with config {:#?}", ty, config);
+            let output = try!(registry.output(cfg));
             outputs.push(output);
         }
 
         // Collect all hup channels.
-        let hups: Vec<mpsc::Sender<()>> = outputs.iter()
+        let hups = outputs.iter()
             .filter_map(|output| output.hup())
             .collect();
 
@@ -250,19 +204,19 @@ impl Drop for Pipe {
 }
 
 pub struct Runtime {
-    tx: mpsc::Sender<Control>,
+    tx: Sender<Control>,
     thread: Option<JoinHandle<()>>,
 }
 
 impl Runtime {
     /// Constructs Zenlog Runtime by constructing and starting all pipelines listed in the given
     /// config.
-    pub fn new(config: &[PipeConfig], registry: &Registry) -> Result<Runtime, ()> {
+    pub fn new(config: &[PipeConfig], registry: &Registry) -> Result<Runtime, Box<Error>> {
         trace!("initializing the runtime: {:#?}", config);
 
         let (tx, rx) = mpsc::channel();
 
-        let thread = Runtime::init(&config, registry, rx)?;
+        let thread = try!(Runtime::init(&config, registry, rx));
 
         let runtime = Runtime {
             tx: tx,
@@ -273,12 +227,12 @@ impl Runtime {
     }
 
     fn init(config: &[PipeConfig], registry: &Registry, rx: mpsc::Receiver<Control>) ->
-        Result<JoinHandle<()>, ()>
+        Result<JoinHandle<()>, Box<Error>>
     {
         let mut pipelines = Vec::new();
 
         for c in config {
-            pipelines.push(Pipe::run(c, registry)?);
+            pipelines.push(try!(Pipe::run(c, registry)));
         }
 
         info!("started {} pipeline(s)", config.len());
