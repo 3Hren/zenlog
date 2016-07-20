@@ -48,6 +48,7 @@ impl Registry {
         info!("registering components");
 
         let mut registry = Registry::default();
+        registry.add_source::<source::StdinSource>();
         registry.add_source::<source::UdpSource>();
 
         registry.add_output::<output::Stream>();

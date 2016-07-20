@@ -5,8 +5,7 @@
             "name": "main",
             "sources": [
                 {
-                    "type": "udp",
-                    "endpoint": "[::]:50031"
+                    "type": "stdin"
                 }
             ],
             "outputs": [

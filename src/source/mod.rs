@@ -3,8 +3,10 @@ use std::sync::mpsc::Sender;
 
 use super::{Config, Record};
 
+pub use self::stdin::StdinSource;
 pub use self::udp::UdpSource;
 
+mod stdin;
 mod udp;
 
 pub trait Source: Send {}
