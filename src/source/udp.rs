@@ -17,7 +17,7 @@ use {Config, Record};
 struct UdpHandler {
     socket: UdpSocket,
     tx: Sender<Arc<Record>>,
-    buf: [u8; 16 * 1024], // TODO: Replace with Vec. Reason is - kernel recv buffers can be tuned.
+    buf: Vec<u8>,
 }
 
 impl UdpHandler {
@@ -25,7 +25,7 @@ impl UdpHandler {
         UdpHandler {
             socket: socket,
             tx: tx,
-            buf: [0; 16 * 1024],
+            buf: Vec::with_capacity(16 * 1024),
         }
     }
 }
@@ -39,7 +39,7 @@ impl Handler for UdpHandler {
 
         loop {
             // Read until EWOULDBLOCK, because we're using edge triggering.
-            match self.socket.recv_from(&mut self.buf) {
+            match self.socket.recv_from(&mut self.buf[..]) {
                 Ok(Some((nread, endpoint))) => {
                     debug!("read {} bytes datagram from {}", nread, endpoint);
 
