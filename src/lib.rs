@@ -29,12 +29,15 @@ pub use config::RuntimeConfig;
 pub type Record = Value;
 pub type Config = Value;
 
+// TODO: Add `info!` log when a pipe/input stopped.
+// TODO: Record as a trait.
+
 enum Control {
     Hup,
     Shutdown,
 }
 
-type FnSourceFactory = Fn(&Config, Sender<Record>) -> Result<Box<Source>, Box<Error>>;
+type FnSourceFactory = Fn(&Config, Sender<Arc<Record>>) -> Result<Box<Source>, Box<Error>>;
 type FnOutputFactory = Fn(&Config) -> Result<Box<Output>, Box<Error>>;
 
 #[derive(Default)]
@@ -79,7 +82,7 @@ impl Registry {
         debug!("registered {} component in 'output' category", T::ty());
     }
 
-    fn source(&self, cfg: &Config, tx: Sender<Record>) -> Result<Box<Source>, Box<Error>> {
+    fn source(&self, cfg: &Config, tx: Sender<Arc<Record>>) -> Result<Box<Source>, Box<Error>> {
         Registry::ty(cfg)
             .map_err(Into::into)
             .and_then(|ty| self.sources.get(ty)
@@ -165,8 +168,6 @@ impl Pipe {
                 }
 
                 // TODO: Filter.
-
-                let record = Arc::new(record);
 
                 for output in &mut outputs {
                     output.handle(&record);

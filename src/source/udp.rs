@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::net::SocketAddr;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::thread::{self, JoinHandle};
 
@@ -15,12 +16,12 @@ use {Config, Record};
 
 struct UdpHandler {
     socket: UdpSocket,
-    tx: Sender<Record>,
+    tx: Sender<Arc<Record>>,
     buf: [u8; 16 * 1024], // TODO: Replace with Vec. Reason is - kernel recv buffers can be tuned.
 }
 
 impl UdpHandler {
-    pub fn new(tx: Sender<Record>, socket: UdpSocket) -> UdpHandler {
+    pub fn new(tx: Sender<Arc<Record>>, socket: UdpSocket) -> UdpHandler {
         UdpHandler {
             socket: socket,
             tx: tx,
@@ -44,7 +45,8 @@ impl Handler for UdpHandler {
 
                     match serde_json::from_slice::<Record>(&self.buf[..nread]) {
                         Ok(record) => {
-                            self.tx.send(record).expect("pipeline must outlive all attached inputs");
+                            self.tx.send(Arc::new(record))
+                                .expect("pipeline must outlive all attached inputs");
                         }
                         Err(err) => {
                             warn!("unable to decode datagram - {}", err);
@@ -74,7 +76,7 @@ pub struct UdpSource {
 }
 
 impl UdpSource {
-    fn new(endpoint: &SocketAddr, tx: Sender<Record>) -> Result<UdpSource, Box<Error>> {
+    fn new(endpoint: &SocketAddr, tx: Sender<Arc<Record>>) -> Result<UdpSource, Box<Error>> {
         let listener = try!(UdpSocket::bound(endpoint));
         info!(target: "UDP input", "exposed UDP input on {}", endpoint);
 
@@ -104,7 +106,7 @@ impl SourceFactory for UdpSource {
         "udp"
     }
 
-    fn run(cfg: &Config, tx: Sender<Record>) -> Result<Box<Source>, Box<Error>> {
+    fn run(cfg: &Config, tx: Sender<Arc<Record>>) -> Result<Box<Source>, Box<Error>> {
         let endpoint = cfg.find("endpoint")
             .expect("field 'endpoint' is required")
             .as_string()

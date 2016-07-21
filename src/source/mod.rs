@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
 use super::{Config, Record};
@@ -20,6 +21,6 @@ pub trait SourceFactory {
         where Self: Sized;
 
     /// Constructs and immediately run a new source by configuring it with the given config.
-    fn run(cfg: &Config, tx: Sender<Record>) -> Result<Box<Source>, Self::Error>
+    fn run(cfg: &Config, tx: Sender<Arc<Record>>) -> Result<Box<Source>, Self::Error>
         where Self: Sized;
 }
