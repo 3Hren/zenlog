@@ -17,6 +17,7 @@ use serde_json::Value;
 mod config;
 mod output;
 mod source;
+mod record;
 
 pub mod logging;
 
@@ -54,7 +55,7 @@ impl Registry {
         registry.add_source::<source::StdinSource>();
         registry.add_source::<source::UdpSource>();
 
-        registry.add_output::<output::Stream>();
+        registry.add_output::<output::Dev>();
 
         registry
     }

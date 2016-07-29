@@ -25,7 +25,7 @@ impl PipeConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct RuntimeConfig {
     /// Logging severity.
-    severity: usize,
+    severity: String,
     /// Generic pipelines config.
     pipelines: Vec<PipeConfig>,
 }
@@ -37,8 +37,8 @@ impl RuntimeConfig {
         Ok(cfg)
     }
 
-    pub fn severity(&self) -> usize {
-        self.severity
+    pub fn severity(&self) -> &str {
+        &self.severity
     }
 
     pub fn pipelines(&self) -> &Vec<PipeConfig> {

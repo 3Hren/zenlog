@@ -1,47 +1,61 @@
-use std::io::{Write};
+use std::error::Error;
+use std::io::Write;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use libc;
 use chrono;
-use log;
-use log::{LogRecord, LogLevel, LogMetadata, SetLoggerError};
-use termion::{TermWrite};
-use termion::color::{self, Palette};
+use libc;
+use log::{self, LogRecord, LogLevel, LogMetadata};
+use termion::color::{self, AnsiValue};
+
+fn level_as_usize(level: LogLevel) -> usize {
+    match level {
+        LogLevel::Error => 0,
+        LogLevel::Warn => 1,
+        LogLevel::Info => 2,
+        LogLevel::Debug => 3,
+        LogLevel::Trace => 4,
+    }
+}
+
+fn level_as_str(level: LogLevel) -> &'static str {
+    match level {
+        LogLevel::Error => "ERROR",
+        LogLevel::Warn => "WARN",
+        LogLevel::Info => "INFO",
+        LogLevel::Debug => "DEBUG",
+        LogLevel::Trace => "TRACE",
+    }
+}
 
 struct Logger {
-    level: LogLevel,
+    level: Arc<AtomicUsize>,
 }
 
 impl Logger {
-    fn new(level: LogLevel) -> Logger {
+    fn new(level: Arc<AtomicUsize>) -> Logger {
         Logger {
             level: level,
         }
     }
 }
 
-fn severity(level: LogLevel) -> &'static str {
-    match level {
-        LogLevel::Trace => "T",
-        LogLevel::Debug => "D",
-        LogLevel::Info  => "I",
-        LogLevel::Warn  => "W",
-        LogLevel::Error => "E",
-    }
-}
-
-fn color(level: LogLevel) -> Palette {
-    match level {
+fn color(level: LogLevel) -> color::Fg<AnsiValue> {
+    let val = match level {
         LogLevel::Trace |
-        LogLevel::Debug => Palette::Rgb(2, 2, 2),
-        LogLevel::Info  => Palette::Rgb(0, 1, 3),
-        LogLevel::Warn  => Palette::Yellow,
-        LogLevel::Error => Palette::Red,
-    }
+        LogLevel::Debug => AnsiValue::rgb(2, 2, 2),
+        LogLevel::Info  => AnsiValue::rgb(0, 1, 3),
+        LogLevel::Warn  => AnsiValue::rgb(4, 3, 0),
+        LogLevel::Error => AnsiValue::rgb(2, 0, 0),
+    };
+
+    color::Fg(val)
 }
 
 impl log::Log for Logger {
     fn enabled(&self, metadata: &LogMetadata) -> bool {
-        metadata.level() <= self.level && metadata.target().starts_with("zenlog")
+        level_as_usize(metadata.level()) <= self.level.load(Ordering::Relaxed) &&
+            metadata.target().starts_with("zenlog")
     }
 
     fn log(&self, rec: &LogRecord) {
@@ -50,33 +64,77 @@ impl log::Log for Logger {
             let mut wr = stdout.lock();
 
             let now = chrono::UTC::now();
+            let pid = unsafe { libc::getpid() };
 
-            wr.color(Palette::Rgb(2, 2, 2)).unwrap();
-            write!(wr, "{} ", now).unwrap();
-            wr.color(color(rec.level())).unwrap();
-            write!(wr, "{} {}/", severity(rec.level()), unsafe { libc::getpid() }).unwrap();
-            write!(wr, "{}:{:<4}", rec.location().module_path(), rec.location().line()).unwrap();
-            wr.color(color::White).unwrap();
-            write!(wr, " - {}\r\n", rec.args()).unwrap();
-            wr.reset().unwrap();
+            writeln!(wr, "{} {} {}{} {}/{}:{:<4}{} - {}{}{}",
+                color::Fg(AnsiValue::rgb(2, 2, 2)),
+                now,
+                color(rec.level()),
+                level_as_str(rec.level()).chars().next().unwrap(),
+                pid,
+                rec.location().module_path(),
+                rec.location().line(),
+                color::Fg(AnsiValue::rgb(2, 2, 2)),
+                color::Fg(color::White),
+                rec.args(),
+                color::Fg(color::Reset)
+            ).unwrap();
             wr.flush().unwrap();
         }
     }
 }
 
-pub fn from_usize(v: usize) -> LogLevel {
-    match v {
-        0 => LogLevel::Trace,
-        1 => LogLevel::Debug,
-        2 => LogLevel::Info,
-        3 => LogLevel::Warn,
-        _ => LogLevel::Error,
+pub trait AsUsize {
+    fn as_usize(&self) -> usize;
+}
+
+impl AsUsize for LogLevel {
+    fn as_usize(&self) -> usize {
+        level_as_usize(*self)
     }
 }
 
-pub fn reset(level: LogLevel) -> Result<(), SetLoggerError> {
+pub trait AsLogLevel {
+    fn as_level(&self) -> Option<LogLevel>;
+}
+
+impl AsLogLevel for usize {
+    fn as_level(&self) -> Option<LogLevel> {
+        let level = match *self {
+            0 => LogLevel::Error,
+            1 => LogLevel::Warn,
+            2 => LogLevel::Info,
+            3 => LogLevel::Debug,
+            _ => LogLevel::Trace,
+        };
+
+        Some(level)
+    }
+}
+
+impl AsLogLevel for str {
+    fn as_level(&self) -> Option<LogLevel> {
+        match self {
+            "ERROR" => Some(LogLevel::Error),
+            "WARN"  => Some(LogLevel::Warn),
+            "INFO"  => Some(LogLevel::Info),
+            "DEBUG" => Some(LogLevel::Debug),
+            "TRACE" => Some(LogLevel::Trace),
+            _ => None,
+        }
+    }
+}
+
+/// Initializes the logging system.
+pub fn init<T: ?Sized + AsLogLevel>(level: &T) -> Result<Arc<AtomicUsize>, Box<Error>> {
+    let level = try!(level.as_level().ok_or("invalid severity level"));
+    let lvl = Arc::new(AtomicUsize::new(level_as_usize(level)));
+
+    let clone = lvl.clone();
     log::set_logger(|max| {
         max.set(level.to_log_level_filter());
-        Box::new(Logger::new(level))
+        Box::new(Logger::new(clone))
     })
+    .map(|_| lvl)
+    .map_err(|e| e.into())
 }

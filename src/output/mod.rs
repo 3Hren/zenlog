@@ -8,13 +8,9 @@
 //!
 //! The result: each output manages its blocking mode itself.
 
-// mod file;
-// mod nil;
-mod stream;
+mod dev;
 
-// pub use self::file::FileOutput;
-// pub use self::nil::Null;
-pub use self::stream::Stream;
+pub use self::dev::Dev;
 
 use std::error::Error;
 use std::sync::Arc;

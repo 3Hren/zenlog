@@ -18,8 +18,7 @@ mio = "*"
 libc = "*"
 log = "*"
 chrono = "*"
-[dependencies.termion]
-git = "https://github.com/ticki/termion.git"
+termion = "1"
 
 [build-dependencies]
 serde_codegen = "*"

@@ -1,16 +1,17 @@
 {
-    "severity": 0,
+    "severity": "TRACE",
     "pipelines": [
         {
             "name": "main",
             "sources": [
                 {
-                    "type": "stdin"
+                    "type": "udp",
+                    "endpoint": "127.0.0.1:50031"
                 }
             ],
             "outputs": [
                 {
-                    "type": "stream"
+                    "type": "dev"
                 }
             ]
         }

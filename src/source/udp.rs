@@ -1,3 +1,4 @@
+use std::iter::repeat;
 use std::error::Error;
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -25,7 +26,7 @@ impl UdpHandler {
         UdpHandler {
             socket: socket,
             tx: tx,
-            buf: Vec::with_capacity(16 * 1024),
+            buf: repeat(0).take(16 * 1024).collect(),
         }
     }
 }
@@ -60,6 +61,7 @@ impl Handler for UdpHandler {
                 Err(err) => {
                     error!("failed to read datagram: {:?}", err);
                     ev.shutdown();
+                    break;
                 }
             }
         }

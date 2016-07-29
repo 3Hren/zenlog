@@ -6,7 +6,7 @@ Log transport, filtering and processing.
 Every library should have a manifest, which describes goals, for which that library was created.
 
 ### Use Everywhere
-No need to write another swiss-knife-logging-library for every language - it's not scalable! Instead teach it how to dump structured logs over UDP encoded with MessagePack - the rest we will for you.
+No need to write another swiss-knife-logging-library for every language - it's not scalable! Instead teach it how to dump structured logs over UDP encoded with JSON/MessagePack/FlatBuffers - the rest we will do for you.
 
 ### Performance
 Zen is developing to be the fastest possible solution in its category.
